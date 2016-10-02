@@ -23,8 +23,9 @@ typedef enum {
 
 
 typedef struct cJSON {
-   struct cJSON * next;
    struct cJSON * prev;
+   struct cJSON * next;
+   struct cJSON * parent;
    struct cJSON * child; 
    
    JSON_ValueType type;

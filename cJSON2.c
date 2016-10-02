@@ -9,8 +9,9 @@ Private Types
 typedef enum
     {
     PARSE_STATE_VALUE,
-    PARSE_STATE_ARRAY,
+    PARSE_STATE_NEXT_ARRAY_VALUE,
     PARSE_STATE_OBJECT,
+    PARSE_STATE_NEXT_OBJECT_VALUE,
     PARSE_STATE_ERROR,
     PARSE_STATE_COMPLETE,
     } parse_state;
@@ -23,9 +24,12 @@ typedef struct
     cJSON *         root;
     cJSON *         crnt_node;
     parse_state     state;
-    int             array_depth;
-    int             object_depth;
     } parse_context;
+
+/****************************************
+Private Helper Macros
+****************************************/
+#define node_is_array( _node ) ( ( NULL != _node ) && ( cJSON_Array == _node->type ) )
 
 
 /****************************************
@@ -39,6 +43,16 @@ static void context_init
 static cJSON * new_node
     (
     cJSON_Hooks const * hooks
+    );
+
+static void next_array_value
+    (
+    parse_context * context
+    );
+
+static void next_parse_state
+    (
+    parse_context * context
     );
 
 static void parse
@@ -110,9 +124,9 @@ void cJSON_DeleteWithHooks
     cJSON_Hooks const * hooks
     )
 {
-// TODO
+// TODO:
 hooks->free_fn( json );
-}    
+}
 
 
 /**********************************************************
@@ -191,8 +205,6 @@ context->crnt_posn    = NULL;
 context->root         = NULL;
 context->crnt_node    = NULL;
 context->state        = PARSE_STATE_ERROR;
-context->array_depth  = 0;
-context->object_depth = 0;
 memset( &context->hooks, 0, sizeof( context->hooks ) );
 }    
 
@@ -219,7 +231,112 @@ if( NULL != node )
     }
 
 return node;
-}    
+}
+
+
+/**********************************************************
+*	next_array_value
+*
+*	Prepares the context to parse the next array value if
+*	if there is one
+*
+**********************************************************/
+static void next_array_value
+    (
+    parse_context * context
+    )
+{
+cJSON * next_array_value;
+
+context->crnt_posn = skip_whitespace( context->crnt_posn );
+
+if( ( ']' == context->crnt_posn[0] ) && ( node_is_array( context->crnt_node->parent ) ) )
+    {
+    // We've come to the end of an array. Move past the ']'.
+    context->crnt_posn++;
+
+    // Step up a level back to the containing array.
+    context->crnt_node = context->crnt_node->parent;
+    next_parse_state( context );
+    }
+else if( ( ',' ==  context->crnt_posn[0] ) && ( node_is_array( context->crnt_node->parent ) ) )
+    {
+    // We found another value in the array, move past the ','
+    context->crnt_posn++;
+
+    next_array_value = new_node( &context->hooks );
+    if( NULL == next_array_value )
+        {
+        context->state = PARSE_STATE_ERROR;
+        }
+    else
+        {
+        next_array_value->parent = context->crnt_node->parent;
+        next_array_value->prev   = context->crnt_node;
+        context->crnt_node->next = next_array_value;
+        context->crnt_node       = next_array_value;
+        context->state           = PARSE_STATE_VALUE;
+        }
+    }
+else if( ( cJSON_Array == context->crnt_node->type ) && ( NULL == context->crnt_node->child ) )
+    {
+    // We've come to the first value in an array
+    next_array_value = new_node( &context->hooks );
+    if( NULL == next_array_value )
+        {
+        context->state = PARSE_STATE_ERROR;
+        }
+    else
+        {
+        // Step down a level to parse all values in the array.
+        next_array_value->parent  = context->crnt_node;
+        context->crnt_node->child = next_array_value;
+        context->crnt_node        = next_array_value;
+        context->state            = PARSE_STATE_VALUE;
+        }
+    }
+else
+    {
+    // Invalid input
+    context->state = PARSE_STATE_ERROR;
+    }
+}
+
+/**********************************************************
+*	next_parse_state
+*
+*	Returns the next parse state. Should be called after
+*   Successfully parsing a value.
+*
+**********************************************************/
+static void next_parse_state
+    (
+    parse_context * context
+    )
+{
+
+if( PARSE_STATE_ERROR == context->state )
+    {
+    // Shouldn't get here.
+    }
+else if( NULL == context->crnt_node->parent )
+    {
+    context->state = PARSE_STATE_COMPLETE;
+    }
+else if( cJSON_Array == context->crnt_node->parent->type )
+    {
+    context->state = PARSE_STATE_NEXT_ARRAY_VALUE;
+    }
+else if( cJSON_Object == context->crnt_node->parent->type )
+    {
+    context->state = PARSE_STATE_NEXT_OBJECT_VALUE;
+    }
+else
+    {
+    // Shouldn't get here.
+    context->state = PARSE_STATE_ERROR;
+    }
+}
 
 
 /**********************************************************
@@ -242,10 +359,10 @@ while( ( PARSE_STATE_COMPLETE != context->state ) && ( PARSE_STATE_ERROR != cont
                 parse_value( context );
                 break;
 
-            case PARSE_STATE_ARRAY:
-                parse_array( context );
+            case PARSE_STATE_NEXT_ARRAY_VALUE:
+                next_array_value( context );
                 break;
-                
+
             case PARSE_STATE_OBJECT:
                 parse_object( context );
                 break;
@@ -255,6 +372,12 @@ while( ( PARSE_STATE_COMPLETE != context->state ) && ( PARSE_STATE_ERROR != cont
             context->state = PARSE_STATE_ERROR;
             break;
         }
+    }
+
+if( PARSE_STATE_ERROR == context->state )
+    {
+    cJSON_DeleteWithHooks( context->root, &context->hooks );
+    context->root = NULL;
     }
 }    
 
@@ -270,31 +393,26 @@ static void parse_array
     parse_context * context
     )
 {
-context->state = PARSE_STATE_VALUE;
+context->crnt_node->type = cJSON_Array;
 
-// Move past the opening '[' of the array and skip white space.
+// Move past the opening '[' of the array.
 context->crnt_posn++;
+
+// Check whether this is an empty array.
 context->crnt_posn = skip_whitespace( context->crnt_posn );
 
-while( ( ']' != context->crnt_posn[0] ) && ( PARSE_STATE_VALUE == context->state ) )
+if( ']' == context->crnt_posn[0] )
     {
-    parse_value( context );
-
-    if( PARSE_STATE_VALUE == context->state )
-        {
-        context->crnt_posn = skip_whitespace( context->crnt_posn );
-        if( ',' == context->crnt_posn[0] )
-            {
-            context->crnt_posn++;
-            }
-        }
+    // Move past the closing bracket of this empty array
+    context->crnt_posn++;
+    next_parse_state( context );
     }
-
-if( ( PARSE_STATE_ERROR != context->state ) && ( ']' == context->crnt_posn[0] ) )
+else
     {
-    context->array_depth--;
+    // This array contains values
+    context->state = PARSE_STATE_NEXT_ARRAY_VALUE;
     }
-}    
+}
 
 
 /**********************************************************
@@ -318,16 +436,19 @@ else if( 0 == strncmp( context->crnt_posn, "null", 4 ) )
     {
     context->crnt_node->type = cJSON_Null;
     context->crnt_posn += 4;
+    next_parse_state( context );
     }
 else if( 0 == strncmp( context->crnt_posn, "false", 5 ) )
     {
     context->crnt_node->type = cJSON_False;
     context->crnt_posn += 5;
+    next_parse_state( context );
     }
 else if( 0 == strncmp( context->crnt_posn, "true", 4 ) )
     {
     context->crnt_node->type = cJSON_True;
     context->crnt_posn += 4;
+    next_parse_state( context );
     }
 else if( '\"' == context->crnt_posn[0] )
     {
@@ -341,13 +462,11 @@ else if( ( '-' == context->crnt_posn[0] ) ||
     }
 else if( '[' == context->crnt_posn[0] )
     {
-    context->state = PARSE_STATE_ARRAY;
-    context->array_depth++;
+    parse_array( context );
     }
 else if( '{' == context->crnt_posn[0] )
     {
     context->state = PARSE_STATE_OBJECT;
-    context->object_depth++;
     }
 else
     {
@@ -372,7 +491,8 @@ static void parse_number
 context->crnt_node->type = cJSON_Number;
 context->crnt_node->valuedouble = 1.0;
 context->crnt_node->valueint = 1;
-}    
+next_parse_state( context );
+}
 
 
 /**********************************************************
@@ -404,7 +524,8 @@ static void parse_string
 // TODO
 context->crnt_node->type = cJSON_String;
 asprintf( &context->crnt_node->valuestring, "Hello" );
-}    
+    next_parse_state( context );
+}
 
 
 /**********************************************************

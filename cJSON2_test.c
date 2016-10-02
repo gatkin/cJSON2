@@ -11,6 +11,11 @@ typedef struct
     test_func       test_func;
     } test;
 
+static int test_parse_array_empty
+    (
+    void
+    );
+
 static int test_parse_false
     (
     void
@@ -27,10 +32,11 @@ static int test_parse_true
     );
 
 static test tests[] = 
-    {/*     description,        test_func           */
-        {   "Pasre false",      test_parse_false    },
-        {   "Parse null",       test_parse_null     },
-        {   "Parse true",       test_parse_true     },
+    {/*     description,                test_func               */
+        {   "Parse empty array",        test_parse_array_empty  },
+        {   "Parse false",              test_parse_false        },
+        {   "Parse null",               test_parse_null         },
+        {   "Parse true",               test_parse_true         },
     };
 
 static char const * TEST_PASSED = "PASSED";
@@ -82,6 +88,30 @@ printf( "%d PASSED, %d FAILED\n", num_passed, num_failed );
 
 
 /**********************************************************
+*	test_parse_array_empty
+*
+*	Tests parsing an empty JSON array.
+*
+**********************************************************/
+static int test_parse_array_empty
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+
+json = cJSON_Parse( "[null, false, [],    true, []]" );
+
+did_pass = ( NULL != json ) && ( cJSON_Array == json->type );
+
+cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
 *	test_parse_false
 *
 *	Tests parsing a simple single false JSON value
@@ -97,7 +127,7 @@ cJSON * json;
 
 json = cJSON_Parse( "false" );
 
-did_pass = ( cJSON_False == json->type );
+did_pass = ( NULL != json ) && ( cJSON_False == json->type );
 
 cJSON_Delete( json );
 
@@ -121,7 +151,7 @@ cJSON * json;
 
 json = cJSON_Parse( "null" );
 
-did_pass = ( cJSON_Null == json->type );
+did_pass = ( NULL != json ) && ( cJSON_Null == json->type );
 
 cJSON_Delete( json );
 
@@ -145,7 +175,7 @@ cJSON * json;
 
 json = cJSON_Parse( "true" );
 
-did_pass = ( cJSON_True == json->type );
+did_pass = ( NULL != json ) && ( cJSON_True == json->type );
 
 cJSON_Delete( json );
 
