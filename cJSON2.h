@@ -19,7 +19,7 @@ typedef enum {
     cJSON_String,
     cJSON_Array,
     cJSON_Object
-} JSON_ValueType;
+} cJSON_ValueType;
 
 
 typedef struct cJSON {
@@ -28,7 +28,7 @@ typedef struct cJSON {
    struct cJSON * parent;
    struct cJSON * child; 
    
-   JSON_ValueType type;
+   cJSON_ValueType type;
    
    char *   valuestring;
    int      valueint;
@@ -55,6 +55,17 @@ void cJSON_DeleteWithHooks
     (
     cJSON *             json,
     cJSON_Hooks const * hooks
+    );
+
+cJSON * cJSON_GetArrayItem
+    (
+    cJSON const *   json_array,
+    int             index
+    );
+
+int cJSON_GetArraySize
+    (
+    cJSON const *   json_array
     );
 
 cJSON * cJSON_Parse

@@ -31,6 +31,7 @@ Private Helper Macros
 ****************************************/
 #define node_is_array( _node ) ( ( NULL != _node ) && ( cJSON_Array == _node->type ) )
 
+#define is_number( _crnt_char ) ( ( _crnt_char == '-' ) || ( ( '0' <= _crnt_char ) && ( _crnt_char <= '9' ) ) )
 
 /****************************************
 Private Function Declarations
@@ -46,6 +47,11 @@ static cJSON * new_node
     );
 
 static void next_array_value
+    (
+    parse_context * context
+    );
+
+static void next_object_value
     (
     parse_context * context
     );
@@ -106,7 +112,7 @@ void cJSON_Delete
     cJSON * json
     )
 {
-// TODO
+// TODO: Actually implemet. This currently leaks resources.
 free( json );
 }
 
@@ -126,6 +132,92 @@ void cJSON_DeleteWithHooks
 {
 // TODO:
 hooks->free_fn( json );
+}
+
+/**********************************************************
+*	cJSON_GetArrayItem
+*
+*	Returns the item at the specified index in the provided
+*   array. Returns NULL if the provided object is not an array
+*   or the index exceeds the bounds of the array.
+*
+**********************************************************/
+cJSON * cJSON_GetArrayItem
+    (
+    cJSON const *   json_array,
+    int             index
+    )
+{
+int     crnt_idx;
+cJSON * node;
+
+node     = NULL;
+crnt_idx = 0;
+
+if( index < 0 )
+    {
+    return NULL;
+    }
+if( NULL == json_array )
+    {
+    return NULL;
+    }
+else if ( cJSON_Array != json_array->type )
+    {
+    return NULL;
+    }
+
+node = json_array->child;
+while( ( NULL != node ) && ( crnt_idx < index ) )
+    {
+    node = node->next;
+    crnt_idx++;
+    }
+
+if( crnt_idx != index )
+    {
+    // The provided index exceeded the bounds of the array
+    node = NULL;
+    }
+
+return node;
+}
+
+/**********************************************************
+*	cJSON_GetArraySize
+*
+*	Returns the size of the provided array, -1 if the provided
+*   object is not an array.
+*
+**********************************************************/
+int cJSON_GetArraySize
+    (
+    cJSON const *   json_array
+    )
+{
+int     size;
+cJSON * crnt_node;
+
+size = 0;
+
+if( NULL == json_array )
+    {
+    return -1;
+    }
+else if( cJSON_Array != json_array->type )
+    {
+    return -1;
+    }
+
+crnt_node = json_array->child;
+
+while( NULL != crnt_node )
+    {
+    size++;
+    crnt_node = crnt_node->next;
+    }
+
+return size;
 }
 
 
@@ -302,6 +394,23 @@ else
     }
 }
 
+
+/**********************************************************
+*	next_object_value
+*
+*	Prepares the context to parse the next object value if
+*	if there is one
+*
+**********************************************************/
+static void next_object_value
+    (
+    parse_context * context
+    )
+{
+// TODO:
+}
+
+
 /**********************************************************
 *	next_parse_state
 *
@@ -355,19 +464,19 @@ while( ( PARSE_STATE_COMPLETE != context->state ) && ( PARSE_STATE_ERROR != cont
     {
     switch ( context->state )
         {
-            case PARSE_STATE_VALUE:
-                parse_value( context );
-                break;
+        case PARSE_STATE_VALUE:
+            parse_value( context );
+            break;
 
-            case PARSE_STATE_NEXT_ARRAY_VALUE:
-                next_array_value( context );
-                break;
+        case PARSE_STATE_NEXT_ARRAY_VALUE:
+            next_array_value( context );
+            break;
 
-            case PARSE_STATE_OBJECT:
-                parse_object( context );
-                break;
+        case PARSE_STATE_NEXT_OBJECT_VALUE:
+            next_object_value( context );
+            break;
 
-            default:
+        default:
             // Shouldn't get here.
             context->state = PARSE_STATE_ERROR;
             break;
@@ -454,9 +563,7 @@ else if( '\"' == context->crnt_posn[0] )
     {
     parse_string( context );
     }
-else if( ( '-' == context->crnt_posn[0] ) || 
-         ( ( '0' <= context->crnt_posn[0] ) && ( context->crnt_posn[0] <= '9' ) )
-       )
+else if( is_number( context->crnt_posn[0] ) )
     {
     parse_number( context );
     }
@@ -466,7 +573,7 @@ else if( '[' == context->crnt_posn[0] )
     }
 else if( '{' == context->crnt_posn[0] )
     {
-    context->state = PARSE_STATE_OBJECT;
+    parse_object( context );
     }
 else
     {
@@ -506,7 +613,24 @@ static void parse_object
     parse_context * context
     )
 {
-// TODO
+context->crnt_node->type = cJSON_Object;
+
+// Move past the opening '}'
+context->crnt_posn++;
+
+// Check whether this is an empty object
+context->crnt_posn = skip_whitespace( context->crnt_posn );
+if( '}' == context->crnt_posn[0] )
+    {
+    // Move past the closing brace of this empty object
+    context->crnt_posn++;
+    next_parse_state( context );
+    }
+else
+    {
+    // This object contains values.
+    context->state = PARSE_STATE_NEXT_OBJECT_VALUE;
+    }
 }    
 
 
@@ -515,16 +639,57 @@ static void parse_object
 *
 *	Parse JSON string.
 *
+*   TODO: Does not allow control characters or unicode values
+*         and does not prevent against buffer overflows.
+*
 **********************************************************/
 static void parse_string
     (
     parse_context * context
     )
 {
-// TODO
+int             length;
+char const *    crnt_char_ptr;
+
+length = 0;
 context->crnt_node->type = cJSON_String;
-asprintf( &context->crnt_node->valuestring, "Hello" );
+
+if( '\"' != context->crnt_posn[0] )
+    {
+    // Not a string
+    context->state = PARSE_STATE_ERROR;
+    return;
+    }
+
+// Move to the first character past the opening "
+crnt_char_ptr = &context->crnt_posn[1];
+
+while( ( '\0' != *crnt_char_ptr ) && ( '\"' != *crnt_char_ptr ) )
+    {
+    crnt_char_ptr++;
+    length++;
+    }
+
+if( '\"' != *crnt_char_ptr )
+    {
+    // Invalid input
+    context->state = PARSE_STATE_ERROR;
+    return;
+    }
+
+// Allocate space to hold the string, including the NULL terminator
+context->crnt_node->valuestring = (char*)context->hooks.malloc_fn( length + 1 );
+if( NULL == context->crnt_node->valuestring )
+    {
+    context->state = PARSE_STATE_ERROR;
+    return;
+    }
+else
+    {
+    snprintf( context->crnt_node->valuestring, length + 1, "%s", &context->crnt_posn[1] );
+    context->crnt_posn += length + 2;
     next_parse_state( context );
+    }
 }
 
 

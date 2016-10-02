@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "cJSON2.h"
 
+#define cnt_of_array( _xs ) ( sizeof( _xs ) / sizeof( _xs[0] ) )
 
 typedef int (*test_func)(void);
 
@@ -16,6 +18,11 @@ static int test_parse_array_empty
     void
     );
 
+static int test_parse_array_simple_values
+    (
+    void
+    );
+
 static int test_parse_false
     (
     void
@@ -26,17 +33,36 @@ static int test_parse_null
     void
     );
 
+static int test_parse_object_empty
+    (
+    void
+    );
+
+static int test_parse_string
+    (
+    void
+    );
+
+static int test_parse_string_empty
+    (
+    void
+    );
+
 static int test_parse_true
     (
     void
     );
 
 static test tests[] = 
-    {/*     description,                test_func               */
-        {   "Parse empty array",        test_parse_array_empty  },
-        {   "Parse false",              test_parse_false        },
-        {   "Parse null",               test_parse_null         },
-        {   "Parse true",               test_parse_true         },
+    {/*     description,                    test_func                       */
+        {   "Parse empty array",            test_parse_array_empty          },
+        {   "Parse simple-valued array",    test_parse_array_simple_values  },
+        {   "Parse false",                  test_parse_false                },
+        {   "Parse null",                   test_parse_null                 },
+        {   "Parse empty object",           test_parse_object_empty         },
+        {   "Parse string",                 test_parse_string               },
+        {   "Parse empty string",           test_parse_string_empty         },
+        {   "Parse true",                   test_parse_true                 },
     };
 
 static char const * TEST_PASSED = "PASSED";
@@ -101,9 +127,58 @@ static int test_parse_array_empty
 int     did_pass;
 cJSON * json;
 
-json = cJSON_Parse( "[null, false, [],    true, []]" );
+json = cJSON_Parse( "[]" );
 
-did_pass = ( NULL != json ) && ( cJSON_Array == json->type );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_Array == json->type );
+did_pass = ( did_pass ) && ( 0 == cJSON_GetArraySize( json ) );
+did_pass = ( did_pass ) && ( NULL == cJSON_GetArrayItem( json, 0 ) );
+
+cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_parse_array_simple_values
+*
+*	Tests parsing an JSON array containing simple values.
+*
+**********************************************************/
+static int test_parse_array_simple_values
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+int     idx;
+cJSON * array_item;
+
+const cJSON_ValueType exptd_values[] =
+    {
+    cJSON_Null,
+    cJSON_False,
+    cJSON_Array,
+    cJSON_Object,
+    cJSON_String,
+    cJSON_True,
+    cJSON_Array,
+    };
+
+json = cJSON_Parse( "[null, false, [], {}, \"hello\",  true, []]" );
+
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_Array == json->type );
+did_pass = ( did_pass ) && ( cJSON_GetArraySize( json ) == cnt_of_array( exptd_values ) );
+
+for( idx = 0; ( did_pass ) && ( idx < cnt_of_array( exptd_values ) ); idx++ )
+    {
+    array_item = cJSON_GetArrayItem( json, idx );
+    did_pass = ( did_pass ) && ( NULL != array_item );
+    did_pass = ( did_pass ) && ( exptd_values[idx] == array_item->type );
+    }
 
 cJSON_Delete( json );
 
@@ -127,7 +202,8 @@ cJSON * json;
 
 json = cJSON_Parse( "false" );
 
-did_pass = ( NULL != json ) && ( cJSON_False == json->type );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_False == json->type );
 
 cJSON_Delete( json );
 
@@ -151,7 +227,85 @@ cJSON * json;
 
 json = cJSON_Parse( "null" );
 
-did_pass = ( NULL != json ) && ( cJSON_Null == json->type );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_Null == json->type );
+
+cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_parse_object_empty
+*
+*	Tests parsing an empty object
+*
+**********************************************************/
+static int test_parse_object_empty
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+
+json = cJSON_Parse( "{}" );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_Object == json->type );
+
+cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_parse_string
+*
+*	Tests parsing a simple string
+*
+**********************************************************/
+static int test_parse_string
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+
+json = cJSON_Parse( "\"hello\"" );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_String == json->type );
+did_pass = ( did_pass ) && ( NULL != json->valuestring  );
+did_pass = ( did_pass ) && ( strlen( "hello" ) == strlen( json->valuestring ) );
+did_pass = ( did_pass ) && ( 0 == strcmp( "hello", json->valuestring ) );
+
+cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_parse_string_empty
+*
+*	Tests parsing an empty string
+*
+**********************************************************/
+static int test_parse_string_empty
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+
+json = cJSON_Parse( "\"\"" );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_String == json->type );
+did_pass = ( did_pass ) && ( NULL != json->valuestring  );
+did_pass = ( did_pass ) && ( 0 == strcmp( "", json->valuestring ) );
 
 cJSON_Delete( json );
 
@@ -175,7 +329,8 @@ cJSON * json;
 
 json = cJSON_Parse( "true" );
 
-did_pass = ( NULL != json ) && ( cJSON_True == json->type );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_True == json->type );
 
 cJSON_Delete( json );
 
