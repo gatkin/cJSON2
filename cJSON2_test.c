@@ -33,6 +33,11 @@ static int test_parse_null
     void
     );
 
+static int test_parse_object
+    (
+    void
+    );
+
 static int test_parse_object_empty
     (
     void
@@ -59,6 +64,7 @@ static test tests[] =
         {   "Parse simple-valued array",    test_parse_array_simple_values  },
         {   "Parse false",                  test_parse_false                },
         {   "Parse null",                   test_parse_null                 },
+        {   "Parse object",                 test_parse_object               },
         {   "Parse empty object",           test_parse_object_empty         },
         {   "Parse string",                 test_parse_string               },
         {   "Parse empty string",           test_parse_string_empty         },
@@ -229,6 +235,30 @@ json = cJSON_Parse( "null" );
 
 did_pass = ( NULL != json );
 did_pass = ( did_pass ) && ( cJSON_Null == json->type );
+
+cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_parse_object
+*
+*	Tests parsing an object
+*
+**********************************************************/
+static int test_parse_object
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+
+json = cJSON_Parse( "{ \"hello\" : \"world\", \"array\": [], \"null\": null, \"true\" : true }" );
+did_pass = ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_Object == json->type );
 
 cJSON_Delete( json );
 
