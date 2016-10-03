@@ -125,8 +125,12 @@ void cJSON_Delete
     cJSON * json
     )
 {
-// TODO: Actually implemet. This currently leaks resources.
-free( json );
+cJSON_Hooks default_hooks;
+
+default_hooks.free_fn   = free;
+default_hooks.malloc_fn = malloc;
+
+cJSON_DeleteWithHooks( json, &default_hooks );
 }
 
 
@@ -143,8 +147,47 @@ void cJSON_DeleteWithHooks
     cJSON_Hooks const * hooks
     )
 {
-// TODO:
-hooks->free_fn( json );
+cJSON * crnt_node;
+cJSON * next_node;
+
+crnt_node = json;
+
+while( NULL != crnt_node )
+    {
+    // First delete all of a node's children before deleting the node
+    if( NULL != crnt_node->child )
+        {
+        next_node = crnt_node->child;
+        }
+    else
+        {
+        // Move on to this node's sibling first.
+        if( NULL != crnt_node->next )
+            {
+            next_node = crnt_node->next;
+            }
+        else
+            {
+            // Finally move back to this node's parent.
+            next_node = crnt_node->parent;
+
+            // Set the parent's child pointer to NULL so it can know that all
+            // of its children have been clean up.
+            if( NULL != next_node )
+                {
+                next_node->child = NULL;
+                }
+            }
+
+        // Safe to completely free the whole node now.
+        hooks->free_fn( crnt_node->string );
+        hooks->free_fn( crnt_node->valuestring );
+        hooks->free_fn( crnt_node );
+        }
+
+    crnt_node = next_node;
+    }
+
 }
 
 /**********************************************************
@@ -383,23 +426,6 @@ else if( ( ',' ==  context->crnt_posn[0] ) && ( node_is_array( context->crnt_nod
         context->state           = PARSE_STATE_VALUE;
         }
     }
-else if( ( cJSON_Array == context->crnt_node->type ) && ( NULL == context->crnt_node->child ) )
-    {
-    // We've come to the first value in an array
-    next_array_value = new_node( &context->hooks );
-    if( NULL == next_array_value )
-        {
-        context->state = PARSE_STATE_ERROR;
-        }
-    else
-        {
-        // Step down a level to parse all values in the array.
-        next_array_value->parent  = context->crnt_node;
-        context->crnt_node->child = next_array_value;
-        context->crnt_node        = next_array_value;
-        context->state            = PARSE_STATE_VALUE;
-        }
-    }
 else
     {
     // Invalid input
@@ -450,22 +476,6 @@ else if( ( ',' == context->crnt_posn[0] ) && ( node_is_object( context->crnt_nod
         context->crnt_node->next = next_object_item;
         context->crnt_node       = next_object_item;
         context->state           = PARSE_STATE_OBJECT_KEY;
-        }
-    }
-else if( ( cJSON_Object == context->crnt_node->type ) && ( NULL == context->crnt_node->child ) )
-    {
-    // We've come to the first value within a non-empty object.
-    next_object_item = new_node( &context->hooks );
-    if( NULL == next_object_item )
-        {
-        context->state = PARSE_STATE_ERROR;
-        }
-    else
-        {
-        next_object_item->parent  = context->crnt_node;
-        context->crnt_node->child = next_object_item;
-        context->crnt_node        = next_object_item;
-        context->state            = PARSE_STATE_OBJECT_KEY;
         }
     }
 else
@@ -571,85 +581,44 @@ static void parse_array
     parse_context * context
     )
 {
+cJSON * array_item;
+
 context->crnt_node->type = cJSON_Array;
 
 // Move past the opening '[' of the array.
 context->crnt_posn++;
 
-// Check whether this is an empty array.
+// Move to the first value of the array
 context->crnt_posn = skip_whitespace( context->crnt_posn );
 
 if( ']' == context->crnt_posn[0] )
     {
-    // Move past the closing bracket of this empty array
+    // This is an empty array. Move past the closing
+    // bracket of this empty array.
     context->crnt_posn++;
     next_parse_state( context );
     }
 else
     {
-    // This array contains values
-    context->state = PARSE_STATE_NEXT_ARRAY_VALUE;
+    // This array contains values, prepare to parse the
+    // first value of the array
+    array_item = new_node( &context->hooks );
+    if( NULL == array_item )
+        {
+        context->state = PARSE_STATE_ERROR;
+        }
+    else
+        {
+        array_item->parent        = context->crnt_node;
+        context->crnt_node->child = array_item;
+        context->crnt_node        = array_item;
+        context->state            = PARSE_STATE_VALUE;
+        }
     }
 }
 
 
-/**********************************************************
-*	parse_value
-*
-*	Parses the next JSON value in a JSON string.
-*
-**********************************************************/
-static void parse_value
-    (
-    parse_context * context
-    )
-{
-context->crnt_posn = skip_whitespace( context->crnt_posn );
 
-if( NULL == context->crnt_posn )
-    {
-    context->state = PARSE_STATE_ERROR;
-    }
-else if( 0 == strncmp( context->crnt_posn, "null", 4 ) )
-    {
-    context->crnt_node->type = cJSON_Null;
-    context->crnt_posn += 4;
-    next_parse_state( context );
-    }
-else if( 0 == strncmp( context->crnt_posn, "false", 5 ) )
-    {
-    context->crnt_node->type = cJSON_False;
-    context->crnt_posn += 5;
-    next_parse_state( context );
-    }
-else if( 0 == strncmp( context->crnt_posn, "true", 4 ) )
-    {
-    context->crnt_node->type = cJSON_True;
-    context->crnt_posn += 4;
-    next_parse_state( context );
-    }
-else if( '\"' == context->crnt_posn[0] )
-    {
-    parse_string( context );
-    }
-else if( is_number( context->crnt_posn[0] ) )
-    {
-    parse_number( context );
-    }
-else if( '[' == context->crnt_posn[0] )
-    {
-    parse_array( context );
-    }
-else if( '{' == context->crnt_posn[0] )
-    {
-    parse_object( context );
-    }
-else
-    {
-    // Invalid input
-    context->state = PARSE_STATE_ERROR;
-    }
-}
 
 
 /**********************************************************
@@ -682,23 +651,37 @@ static void parse_object
     parse_context * context
     )
 {
+cJSON * object_item;
+
 context->crnt_node->type = cJSON_Object;
 
 // Move past the opening '}'
 context->crnt_posn++;
 
-// Check whether this is an empty object
+// Move to the first value of the object
 context->crnt_posn = skip_whitespace( context->crnt_posn );
+
 if( '}' == context->crnt_posn[0] )
     {
-    // Move past the closing brace of this empty object
+    // This is an empty object, move past its closing brace
     context->crnt_posn++;
     next_parse_state( context );
     }
 else
     {
-    // This object contains values.
-    context->state = PARSE_STATE_NEXT_OBJECT_VALUE;
+    // Prepare to parse this object's first value
+    object_item = new_node( &context->hooks );
+    if( NULL == object_item )
+        {
+        context->state = PARSE_STATE_ERROR;
+        }
+    else
+        {
+        object_item->parent       = context->crnt_node;
+        context->crnt_node->child = object_item;
+        context->crnt_node        = object_item;
+        context->state            = PARSE_STATE_OBJECT_KEY;
+        }
     }
 }
 
@@ -760,6 +743,65 @@ is_valid_string = string_extract_from_crnt_posn( context, &context->crnt_node->v
 if( is_valid_string )
     {
     next_parse_state( context );
+    }
+}
+
+
+/**********************************************************
+*	parse_value
+*
+*	Parses the next JSON value in a JSON string.
+*
+**********************************************************/
+static void parse_value
+    (
+    parse_context * context
+    )
+{
+context->crnt_posn = skip_whitespace( context->crnt_posn );
+
+if( NULL == context->crnt_posn )
+    {
+    context->state = PARSE_STATE_ERROR;
+    }
+else if( 0 == strncmp( context->crnt_posn, "null", 4 ) )
+    {
+    context->crnt_node->type = cJSON_Null;
+    context->crnt_posn += 4;
+    next_parse_state( context );
+    }
+else if( 0 == strncmp( context->crnt_posn, "false", 5 ) )
+    {
+    context->crnt_node->type = cJSON_False;
+    context->crnt_posn += 5;
+    next_parse_state( context );
+    }
+else if( 0 == strncmp( context->crnt_posn, "true", 4 ) )
+    {
+    context->crnt_node->type = cJSON_True;
+    context->crnt_posn += 4;
+    next_parse_state( context );
+    }
+else if( '\"' == context->crnt_posn[0] )
+    {
+    parse_string( context );
+    }
+else if( is_number( context->crnt_posn[0] ) )
+    {
+    parse_number( context );
+    }
+else if( '[' == context->crnt_posn[0] )
+    {
+    parse_array( context );
+    }
+else if( '{' == context->crnt_posn[0] )
+    {
+    parse_object( context );
+    }
+else
+    {
+    // Invalid input
+    context->state = PARSE_STATE_ERROR;
     }
 }
 
