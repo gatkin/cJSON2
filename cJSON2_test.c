@@ -58,18 +58,7 @@ static int test_parse_true
     void
     );
 
-static test tests[] = 
-    {/*     description,                    test_func                       */
-        {   "Parse empty array",            test_parse_array_empty          },
-        {   "Parse simple-valued array",    test_parse_array_simple_values  },
-        {   "Parse false",                  test_parse_false                },
-        {   "Parse null",                   test_parse_null                 },
-        {   "Parse object",                 test_parse_object               },
-        {   "Parse empty object",           test_parse_object_empty         },
-        {   "Parse string",                 test_parse_string               },
-        {   "Parse empty string",           test_parse_string_empty         },
-        {   "Parse true",                   test_parse_true                 },
-    };
+
 
 static char const * TEST_PASSED = "PASSED";
 static char const * TEST_FAILED = "FAILED";
@@ -93,7 +82,20 @@ int             i;
 int             did_pass;
 char const *    test_result;
 
-num_tests  = sizeof( tests ) / sizeof( tests[0] );
+test tests[] =
+    {/*     description,                    test_func                       */
+    {   "Parse empty array",            test_parse_array_empty          },
+    {   "Parse simple-valued array",    test_parse_array_simple_values  },
+    {   "Parse false",                  test_parse_false                },
+    {   "Parse null",                   test_parse_null                 },
+    {   "Parse object",                 test_parse_object               },
+    {   "Parse empty object",           test_parse_object_empty         },
+    {   "Parse string",                 test_parse_string               },
+    {   "Parse empty string",           test_parse_string_empty         },
+    {   "Parse true",                   test_parse_true                 },
+    };
+
+num_tests  = cnt_of_array( tests );
 num_passed = 0;
 num_failed = 0;
 

@@ -117,7 +117,7 @@ Public Functions
 /**********************************************************
 *	cJSON_Delete
 *
-*	Clean up resouces owned by a cJSON object.
+*	Clean up resources owned by a cJSON object.
 *
 **********************************************************/
 void cJSON_Delete
@@ -137,7 +137,7 @@ cJSON_DeleteWithHooks( json, &default_hooks );
 /**********************************************************
 *	cJSON_DeleteWithHooks
 *
-*	Clean up resouces owned by a cJSON object using the
+*	Clean up resources owned by a cJSON object using the
 *   provided hooks.
 *
 **********************************************************/
