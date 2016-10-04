@@ -1,3 +1,6 @@
+#include <ctype.h>
+#include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -33,14 +36,17 @@ Private Helper Macros
 
 #define node_is_object( _node ) ( ( NULL != _node ) && ( cJSON_Object == _node->type ) )
 
-#define is_number( _crnt_char ) ( ( _crnt_char == '-' ) || ( ( '0' <= _crnt_char ) && ( _crnt_char <= '9' ) ) )
-
 /****************************************
 Private Function Declarations
 ****************************************/
 static void context_init
     (
     parse_context * context
+    );
+
+__inline static int is_json_number
+    (
+    char const * json
     );
 
 static cJSON * new_node
@@ -354,7 +360,26 @@ context->root         = NULL;
 context->crnt_node    = NULL;
 context->state        = PARSE_STATE_ERROR;
 memset( &context->hooks, 0, sizeof( context->hooks ) );
-}    
+}
+
+
+/**********************************************************
+*	is_json_number
+*
+*	Returns 1 if the provided JSON string is a JSON number
+*
+**********************************************************/
+__inline static int is_json_number
+    (
+    char const * json
+    )
+{
+// JSON NaN and Infinity representations are case-sensitive
+return ( ( '-' == json[0] ) ||
+         ( isdigit( json[0] ) ) ||
+         ( 0 == strncmp( "NaN", json, 3 ) ) ||
+         ( 0 == strncmp( "Infinity", json, 8 ) ) );
+}
 
 
 /**********************************************************
@@ -618,9 +643,6 @@ else
 }
 
 
-
-
-
 /**********************************************************
 *	parse_number
 *
@@ -632,11 +654,35 @@ static void parse_number
     parse_context * context
     )
 {
-// TODO
-context->crnt_node->type = cJSON_Number;
-context->crnt_node->valuedouble = 1.0;
-context->crnt_node->valueint = 1;
-next_parse_state( context );
+double parsed_value;
+char * next_posn;
+
+parsed_value = strtod( context->crnt_posn, &next_posn );
+
+if( ( HUGE_VAL == parsed_value ) || ( -HUGE_VAL == parsed_value ) )
+    {
+    // Overflow
+    context->state = PARSE_STATE_ERROR;
+    }
+else if( ( 0.0 == parsed_value ) && ( ERANGE == errno ) )
+    {
+    // Underflow
+    context->state = PARSE_STATE_ERROR;
+    }
+else if( ( 0.0 == parsed_value ) && ( next_posn == context->crnt_posn ) )
+    {
+    // No conversion was performed
+    context->state = PARSE_STATE_ERROR;
+    }
+else
+    {
+    // Successful parse
+    context->crnt_node->type        = cJSON_Number;
+    context->crnt_node->valuedouble = parsed_value;
+    context->crnt_node->valueint    = (int)parsed_value;
+    context->crnt_posn              = next_posn;
+    next_parse_state( context );
+    }
 }
 
 
@@ -786,7 +832,7 @@ else if( '\"' == context->crnt_posn[0] )
     {
     parse_string( context );
     }
-else if( is_number( context->crnt_posn[0] ) )
+else if( is_json_number( context->crnt_posn ) )
     {
     parse_number( context );
     }
@@ -809,7 +855,7 @@ else
 /**********************************************************
 *	string_extract_from_crnt_posn
 *
-*	Extracts string from current position in JSON string.
+*   Extracts string from current position in JSON string.
 *	If an error occurs, or if the provided JSON is invalid,
 *	this returns 0 and sets extracted_string_out to NULL.
 *	Otherwise this returns 1 and populates extracted_string_out
@@ -872,7 +918,7 @@ return 1;
 /**********************************************************
 *	skip_whitespace
 *
-*	Utility function that returns a pointer to the first
+*   Utility function that returns a pointer to the first
 *   non-whitespace character encountered in the provided
 *   string or the null-terminiator if the entire string is
 *   whitespace.
@@ -890,7 +936,7 @@ if( NULL == string_in )
     return NULL;
     }
 
-for( i = 0; ( string_in[i] != '\0' ) && ( (unsigned char)string_in[i] <= ' ' ); i++ )
+for( i = 0; ( string_in[i] != '\0' ) && ( isspace( string_in[i] ) ); i++ )
     ;
 
 return &string_in[i];

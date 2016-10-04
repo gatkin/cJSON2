@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -12,6 +13,13 @@ typedef struct
     char const *    description;
     test_func       test_func;
     } test;
+
+typedef struct
+    {
+    char const *    json;
+    int             should_parse_succeed;
+    double          exptd_value;
+    } parse_number_test_case;
 
 static int test_parse_array_empty
     (
@@ -29,6 +37,11 @@ static int test_parse_false
     );
 
 static int test_parse_null
+    (
+    void
+    );
+
+static int test_parse_number
     (
     void
     );
@@ -59,7 +72,6 @@ static int test_parse_true
     );
 
 
-
 static char const * TEST_PASSED = "PASSED";
 static char const * TEST_FAILED = "FAILED";
 
@@ -88,6 +100,7 @@ test tests[] =
     {   "Parse simple-valued array",    test_parse_array_simple_values  },
     {   "Parse false",                  test_parse_false                },
     {   "Parse null",                   test_parse_null                 },
+    {   "Parse number",                 test_parse_number               },
     {   "Parse object",                 test_parse_object               },
     {   "Parse empty object",           test_parse_object_empty         },
     {   "Parse string",                 test_parse_string               },
@@ -171,11 +184,12 @@ const cJSON_ValueType exptd_values[] =
     cJSON_Array,
     cJSON_Object,
     cJSON_String,
+    cJSON_Number,
     cJSON_True,
     cJSON_Array,
     };
 
-json = cJSON_Parse( "[null, false, [], {}, \"hello\",  true, []]" );
+json = cJSON_Parse( "[null, false, [], {}, \"hello\", 1.0,  true, []]" );
 
 did_pass = ( NULL != json );
 did_pass = ( did_pass ) && ( cJSON_Array == json->type );
@@ -239,6 +253,58 @@ did_pass = ( NULL != json );
 did_pass = ( did_pass ) && ( cJSON_Null == json->type );
 
 cJSON_Delete( json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_parse_number
+*
+*	Tests parsing numbers
+*
+**********************************************************/
+static int test_parse_number
+    (
+    void
+    )
+{
+parse_number_test_case test_cases[] =
+    {/*     JSON,       should_parse_succeed,   exptd_value     */
+        {   "1.0",      1,                      1.0             },
+        {   "1",        1,                      1.0             },
+        {   "1.7e3",    1,                      1.7e3           },
+        {   "NaN",      1,                      NAN             },
+        {   "Infinity", 1,                      INFINITY        },
+        {   "-1.0",     1,                      -1.0            },
+        {   "-hello",   0,                      0.0             },
+        {   "1.hello",  0,                      0.0             },
+        {   "1,0hello", 0,                      0.0             }
+    };
+
+cJSON * json;
+int     i;
+int     did_pass;
+
+did_pass = 1;
+
+for( i = 0; ( did_pass ) && ( i < cnt_of_array( test_cases ) ); i++ )
+    {
+    json = cJSON_Parse( test_cases[i].json );
+
+    if( test_cases[i].should_parse_succeed )
+        {
+        did_pass = ( NULL != json );
+        did_pass = ( did_pass ) && ( cJSON_Number == json->type );
+        did_pass = ( did_pass ) && ( test_cases[i].exptd_value == json->valuedouble );
+        }
+    else
+        {
+        did_pass = ( NULL == json );
+        }
+
+    cJSON_Delete( json );
+    }
 
 return did_pass;
 }
