@@ -68,6 +68,18 @@ int cJSON_GetArraySize
     cJSON const *   json_array
     );
 
+cJSON * cJSON_GetObjectItem
+    (
+    cJSON const *   json_object,
+    char const *    key
+    );
+
+int cJSON_ObjectHasItem
+    (
+    cJSON const *   json_object,
+    char const *    key
+    );
+
 cJSON * cJSON_Parse
     (
     char const *        json_str

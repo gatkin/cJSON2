@@ -16,10 +16,21 @@ typedef struct
 
 typedef struct
     {
+    char const *    key;
+    cJSON_ValueType value_type;
+    } get_object_item_test_case;
+
+typedef struct
+    {
     char const *    json;
     int             should_parse_succeed;
     double          exptd_value;
     } parse_number_test_case;
+
+static int test_get_object_item
+    (
+    void
+    );
 
 static int test_parse_array_empty
     (
@@ -96,6 +107,7 @@ char const *    test_result;
 
 test tests[] =
     {/*     description,                    test_func                       */
+    {   "Get object items",             test_get_object_item            },
     {   "Parse empty array",            test_parse_array_empty          },
     {   "Parse simple-valued array",    test_parse_array_simple_values  },
     {   "Parse false",                  test_parse_false                },
@@ -131,6 +143,64 @@ for( i = 0; i < num_tests; i++ )
     }
 
 printf( "%d PASSED, %d FAILED\n", num_passed, num_failed );
+}
+
+/**********************************************************
+*	test_get_object_item
+*
+*	Tests looking up items from objects by key
+*
+**********************************************************/
+static int test_get_object_item
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json_object;
+cJSON * json_item;
+int     i;
+
+get_object_item_test_case test_cases[] =
+    {
+        {   "trueKey",      cJSON_True      },
+        {   "arrayKey",     cJSON_Array     },
+        {   "objectKey",    cJSON_Object    },
+        {   "numberKey",    cJSON_Number    },
+        {   "nullKey",      cJSON_Null      },
+    };
+
+// Should return NULL for NULL objects
+json_item = cJSON_GetObjectItem( NULL, "key" );
+did_pass  = ( NULL == json_item );
+
+// Should return NULL for an empty object.
+json_object = cJSON_Parse( "{}" );
+json_item   = cJSON_GetObjectItem( json_object, "key" );
+did_pass    = ( did_pass ) && ( NULL == json_item );
+cJSON_Delete( json_object );
+
+// Should return objects for valid keys in a valid object
+json_object = cJSON_Parse(
+    "{ \"trueKey\": true, \"arrayKey\": [], \"objectKey\" : {},"
+     " \"numberKey\": 17.12, \"nullKey\": null, \"stringKey\": \"hello\" }"
+    );
+did_pass = ( did_pass ) && ( NULL != json_object );
+
+for( i = 0; ( did_pass ) && ( i < cnt_of_array( test_cases ) ); i++ )
+    {
+    json_item = cJSON_GetObjectItem( json_object, test_cases[i].key );
+    did_pass = ( NULL != json_item );
+    did_pass = ( did_pass ) && ( test_cases[i].value_type == json_item->type );
+    }
+
+// Should fail to look up keys that are not in the object
+json_item = cJSON_GetObjectItem( json_object, "notAKey" );
+did_pass = ( did_pass ) && ( NULL == json_item );
+
+cJSON_Delete( json_object );
+
+return did_pass;
 }
 
 
@@ -274,8 +344,8 @@ parse_number_test_case test_cases[] =
         {   "1.0",      1,                      1.0             },
         {   "1",        1,                      1.0             },
         {   "1.7e3",    1,                      1.7e3           },
-        {   "NaN",      1,                      NAN             },
         {   "Infinity", 1,                      INFINITY        },
+        {   "-Infinity",1,                     -INFINITY        },
         {   "-1.0",     1,                      -1.0            },
         {   "-hello",   0,                      0.0             },
         {   "1.hello",  0,                      0.0             },
@@ -305,6 +375,12 @@ for( i = 0; ( did_pass ) && ( i < cnt_of_array( test_cases ) ); i++ )
 
     cJSON_Delete( json );
     }
+
+// Special test for parsing NaN
+json = cJSON_Parse( "NaN" );
+did_pass = ( did_pass ) && ( NULL != json );
+did_pass = ( did_pass ) && ( cJSON_Number == json->type );
+did_pass = ( did_pass ) && ( isnan( json->valuedouble ) );
 
 return did_pass;
 }

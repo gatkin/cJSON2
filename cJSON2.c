@@ -44,11 +44,6 @@ static void context_init
     parse_context * context
     );
 
-__inline static int is_json_number
-    (
-    char const * json
-    );
-
 static cJSON * new_node
     (
     cJSON_Hooks const * hooks
@@ -245,6 +240,7 @@ if( crnt_idx != index )
 return node;
 }
 
+
 /**********************************************************
 *	cJSON_GetArraySize
 *
@@ -280,6 +276,72 @@ while( NULL != crnt_node )
     }
 
 return size;
+}
+
+
+/**********************************************************
+*	cJSON_GetObjectItem
+*
+*	Looks up an item in an object with the provided key. If
+*	no item with the key is found, or if the provided JSON
+*	is not an object, this returns NULL.
+*
+**********************************************************/
+cJSON * cJSON_GetObjectItem
+    (
+    cJSON const *   json_object,
+    char const *    key
+    )
+{
+cJSON * found_item;
+cJSON * crnt_item;
+
+found_item = NULL;
+
+if( NULL == json_object )
+    {
+    return NULL;
+    }
+else if( cJSON_Object != json_object->type )
+    {
+    return NULL;
+    }
+else if( NULL == key )
+    {
+    return NULL;
+    }
+
+crnt_item = json_object->child;
+while( ( NULL != crnt_item ) && ( NULL == found_item ) )
+    {
+    if( 0 == strcmp( key, crnt_item->string ) )
+        {
+        found_item = crnt_item;
+        }
+    else
+        {
+        crnt_item = crnt_item->next;
+        }
+    }
+
+return found_item;
+}
+
+
+/**********************************************************
+*	cJSON_ObjectHasItem
+*
+*	Returns 1 if the provided object contains an item with
+*	the provided key, 0 otherwise.
+*
+**********************************************************/
+int cJSON_ObjectHasItem
+    (
+    cJSON const *   json_object,
+    char const *    key
+    )
+{
+return ( NULL != cJSON_GetObjectItem( json_object, key ) );
 }
 
 
@@ -360,25 +422,6 @@ context->root         = NULL;
 context->crnt_node    = NULL;
 context->state        = PARSE_STATE_ERROR;
 memset( &context->hooks, 0, sizeof( context->hooks ) );
-}
-
-
-/**********************************************************
-*	is_json_number
-*
-*	Returns 1 if the provided JSON string is a JSON number
-*
-**********************************************************/
-__inline static int is_json_number
-    (
-    char const * json
-    )
-{
-// JSON NaN and Infinity representations are case-sensitive
-return ( ( '-' == json[0] ) ||
-         ( isdigit( json[0] ) ) ||
-         ( 0 == strncmp( "NaN", json, 3 ) ) ||
-         ( 0 == strncmp( "Infinity", json, 8 ) ) );
 }
 
 
@@ -523,26 +566,28 @@ static void next_parse_state
     parse_context * context
     )
 {
-
 if( PARSE_STATE_ERROR == context->state )
     {
-    // Shouldn't get here.
+    // Shouldn't get here. If we do it's an error, so leave the
+    // state alone.
     }
-else if( NULL == context->crnt_node->parent )
+else if( ( NULL == context->crnt_node->parent ) && ( '\0' == context->crnt_posn[0] ) )
     {
+    // We just finished parsing the top-level value so we're done. Hurray!
     context->state = PARSE_STATE_COMPLETE;
     }
-else if( cJSON_Array == context->crnt_node->parent->type )
+else if( node_is_array( context->crnt_node->parent ) )
     {
+    // The value we finished parsing is contained within an array
     context->state = PARSE_STATE_NEXT_ARRAY_VALUE;
     }
-else if( cJSON_Object == context->crnt_node->parent->type )
+else if( node_is_object( context->crnt_node->parent ) )
     {
+    // The value we finished parsing is contained within an object
     context->state = PARSE_STATE_NEXT_OBJECT_VALUE;
     }
 else
     {
-    // Shouldn't get here.
     context->state = PARSE_STATE_ERROR;
     }
 }
@@ -559,7 +604,6 @@ static void parse
     parse_context * context
     )
 {
-
 while( ( PARSE_STATE_COMPLETE != context->state ) && ( PARSE_STATE_ERROR != context->state ) )
     {
     switch ( context->state )
@@ -810,6 +854,19 @@ if( NULL == context->crnt_posn )
     {
     context->state = PARSE_STATE_ERROR;
     }
+else if( '\"' == context->crnt_posn[0] )
+    {
+    parse_string( context );
+    }
+
+else if( '[' == context->crnt_posn[0] )
+    {
+    parse_array( context );
+    }
+else if( '{' == context->crnt_posn[0] )
+    {
+    parse_object( context );
+    }
 else if( 0 == strncmp( context->crnt_posn, "null", 4 ) )
     {
     context->crnt_node->type = cJSON_Null;
@@ -828,21 +885,30 @@ else if( 0 == strncmp( context->crnt_posn, "true", 4 ) )
     context->crnt_posn += 4;
     next_parse_state( context );
     }
-else if( '\"' == context->crnt_posn[0] )
+else if( 0 == strncmp( "-Infinity", context->crnt_posn, 9 ) )
     {
-    parse_string( context );
+    context->crnt_node->type        = cJSON_Number;
+    context->crnt_node->valuedouble = -INFINITY;
+    context->crnt_posn += 9;
+    next_parse_state( context );
     }
-else if( is_json_number( context->crnt_posn ) )
+else if( ( '-' == context->crnt_posn[0] ) || ( isdigit( context->crnt_posn[0] ) ) )
     {
     parse_number( context );
     }
-else if( '[' == context->crnt_posn[0] )
+else if( 0 == strncmp( "NaN", context->crnt_posn, 3 ) )
     {
-    parse_array( context );
+    context->crnt_node->type        = cJSON_Number;
+    context->crnt_node->valuedouble = NAN;
+    context->crnt_posn += 3;
+    next_parse_state( context );
     }
-else if( '{' == context->crnt_posn[0] )
+else if( 0 == strncmp( "Infinity", context->crnt_posn, 8 ) )
     {
-    parse_object( context );
+    context->crnt_node->type        = cJSON_Number;
+    context->crnt_node->valuedouble = INFINITY;
+    context->crnt_posn += 8;
+    next_parse_state( context );
     }
 else
     {
