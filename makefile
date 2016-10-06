@@ -1,2 +1,2 @@
-cjson2: cJSON2_test.c cJSON2.c
-	gcc cJSON2.c cJSON2_test.c -D_GNU_SOURCE=1 -Wall -o testcjson2
+cjson2: cJSON2_Test.c cJSON2_Parse.c cJSON2_Serialize.c
+	gcc cJSON2_Test.c cJSON2_Parse.c cJSON2_Serialize.c -Wall -o testcjson2

@@ -192,6 +192,9 @@ for( i = 0; ( did_pass ) && ( i < cnt_of_array( test_cases ) ); i++ )
     json_item = cJSON_GetObjectItem( json_object, test_cases[i].key );
     did_pass = ( NULL != json_item );
     did_pass = ( did_pass ) && ( test_cases[i].value_type == json_item->type );
+
+    // The has item function should return true
+    did_pass = ( did_pass ) && ( cJSON_ObjectHasItem( json_object, test_cases[i].key ) );
     }
 
 // Should fail to look up keys that are not in the object

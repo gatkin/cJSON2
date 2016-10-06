@@ -91,6 +91,17 @@ cJSON * cJSON_ParseWithHooks
     cJSON_Hooks const * hooks
     );
 
+char * cJSON_Print
+    (
+    cJSON const * json
+    );
+
+char * cJSON_PrintWithHooks
+    (
+    cJSON const *       json,
+    cJSON_Hooks const * hooks
+    );
+
 #ifdef __cplusplus
 }
 #endif

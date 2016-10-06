@@ -29,6 +29,7 @@ typedef struct
     parse_state     state;
     } parse_context;
 
+
 /****************************************
 Private Helper Macros
 ****************************************/
@@ -39,11 +40,6 @@ Private Helper Macros
 /****************************************
 Private Function Declarations
 ****************************************/
-static void context_init
-    (
-    parse_context * context
-    );
-
 static cJSON * new_node
     (
     cJSON_Hooks const * hooks
@@ -72,6 +68,11 @@ static void parse
 static void parse_array
     (
     parse_context * context
+    );
+
+static void parse_context_init
+    (
+    parse_context *context
     );
 
 static void parse_number
@@ -380,10 +381,9 @@ cJSON * cJSON_ParseWithHooks
     cJSON_Hooks const * hooks
     )
 {
-parse_context   context;
-int             success;
+parse_context context;
 
-context_init( &context );
+parse_context_init( &context );
 
 context.json_str  = json_str;
 context.crnt_posn = &json_str[0];
@@ -394,34 +394,13 @@ context.hooks.free_fn   = hooks->free_fn;
 
 context.root      = new_node( &context.hooks );
 context.crnt_node = context.root;
-success = ( NULL != context.root );
 
-if( success )
+if( NULL != context.root )
     {
     parse( &context );
     }
 
 return context.root;
-}
-
-
-/**********************************************************
-*	context_init
-*
-*	Initialize parse context.
-*
-**********************************************************/
-static void context_init
-    (
-    parse_context * context
-    )
-{
-context->json_str     = NULL;
-context->crnt_posn    = NULL;
-context->root         = NULL;
-context->crnt_node    = NULL;
-context->state        = PARSE_STATE_ERROR;
-memset( &context->hooks, 0, sizeof( context->hooks ) );
 }
 
 
@@ -684,6 +663,26 @@ else
         context->state            = PARSE_STATE_VALUE;
         }
     }
+}
+
+
+/**********************************************************
+*	parse_context_init
+*
+*	Initialize parse context.
+*
+**********************************************************/
+static void parse_context_init
+    (
+    parse_context *context
+    )
+{
+context->json_str     = NULL;
+context->crnt_posn    = NULL;
+context->root         = NULL;
+context->crnt_node    = NULL;
+context->state        = PARSE_STATE_ERROR;
+memset( &context->hooks, 0, sizeof( context->hooks ) );
 }
 
 
