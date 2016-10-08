@@ -29,17 +29,19 @@ typedef struct
     parse_state     state;
     } parse_context;
 
-
-/****************************************
-Private Helper Macros
-****************************************/
-#define node_is_array( _node ) ( ( NULL != _node ) && ( cJSON_Array == _node->type ) )
-
-#define node_is_object( _node ) ( ( NULL != _node ) && ( cJSON_Object == _node->type ) )
-
 /****************************************
 Private Function Declarations
 ****************************************/
+static void crnt_node_add_child
+    (
+    parse_context * context
+    );
+
+static void crnt_node_add_sibling
+    (
+    parse_context * context
+    );
+
 static cJSON * new_node
     (
     cJSON_Hooks const * hooks
@@ -58,6 +60,16 @@ static void next_object_value
 static void next_parse_state
     (
     parse_context * context
+    );
+
+static int __inline parent_node_is_array
+    (
+    cJSON const * node
+    );
+
+static int __inline parent_node_is_object
+    (
+    cJSON const * node
     );
 
 static void parse
@@ -405,6 +417,64 @@ return context.root;
 
 
 /**********************************************************
+*	crnt_node_add_child
+*
+*	Adds a child to node the context's current node and sets
+*	the context's current node to the newly created node.
+*
+**********************************************************/
+static void crnt_node_add_child
+    (
+    parse_context * context
+    )
+{
+cJSON * child;
+
+child = new_node( &context->hooks );
+if( NULL == child )
+    {
+    context->state = PARSE_STATE_ERROR;
+    }
+else
+    {
+    child->parent             = context->crnt_node;
+    context->crnt_node->child = child;
+    context->crnt_node        = child;
+    }
+}
+
+
+/**********************************************************
+*	crnt_node_add_sibling
+*
+*	Adds a sibling node to the context's current node and
+*	sets the context's current node to the newly created
+*	node.
+*
+**********************************************************/
+static void crnt_node_add_sibling
+    (
+    parse_context * context
+    )
+{
+cJSON * sibling;
+
+sibling = new_node( &context->hooks );
+if( NULL == sibling )
+    {
+    context->state = PARSE_STATE_ERROR;
+    }
+else
+    {
+    sibling->prev            = context->crnt_node;
+    sibling->parent          = context->crnt_node->parent;
+    context->crnt_node->next = sibling;
+    context->crnt_node       = sibling;
+    }
+}
+
+
+/**********************************************************
 *	new_node
 *
 *	Creates, initializes, and returns a new node. It is the
@@ -441,11 +511,9 @@ static void next_array_value
     parse_context * context
     )
 {
-cJSON * next_array_value;
-
 context->crnt_posn = skip_whitespace( context->crnt_posn );
 
-if( ( ']' == context->crnt_posn[0] ) && ( node_is_array( context->crnt_node->parent ) ) )
+if( ( ']' == context->crnt_posn[0] ) && ( parent_node_is_array( context->crnt_node ) ) )
     {
     // We've come to the end of an array. Move past the ']'.
     context->crnt_posn++;
@@ -454,23 +522,16 @@ if( ( ']' == context->crnt_posn[0] ) && ( node_is_array( context->crnt_node->par
     context->crnt_node = context->crnt_node->parent;
     next_parse_state( context );
     }
-else if( ( ',' ==  context->crnt_posn[0] ) && ( node_is_array( context->crnt_node->parent ) ) )
+else if( ( ',' ==  context->crnt_posn[0] ) && ( parent_node_is_array( context->crnt_node ) ) )
     {
-    // We found another value in the array, move past the ','
+    // We found another value in the array, move past the ',' and prepare to parse the
+    // next value in the array.
     context->crnt_posn++;
 
-    next_array_value = new_node( &context->hooks );
-    if( NULL == next_array_value )
+    crnt_node_add_sibling( context );
+    if( PARSE_STATE_ERROR != context->state )
         {
-        context->state = PARSE_STATE_ERROR;
-        }
-    else
-        {
-        next_array_value->parent = context->crnt_node->parent;
-        next_array_value->prev   = context->crnt_node;
-        context->crnt_node->next = next_array_value;
-        context->crnt_node       = next_array_value;
-        context->state           = PARSE_STATE_VALUE;
+        context->state = PARSE_STATE_VALUE;
         }
     }
 else
@@ -493,11 +554,9 @@ static void next_object_value
     parse_context * context
     )
 {
-cJSON * next_object_item;
-
 context->crnt_posn = skip_whitespace( context->crnt_posn );
 
-if( ( '}' == context->crnt_posn[0] ) && ( node_is_object( context->crnt_node->parent ) ) )
+if( ( '}' == context->crnt_posn[0] ) && ( parent_node_is_object( context->crnt_node ) ) )
     {
     // We've reached the end of an object. Move past the closing '}'.
     context->crnt_posn++;
@@ -506,23 +565,16 @@ if( ( '}' == context->crnt_posn[0] ) && ( node_is_object( context->crnt_node->pa
     context->crnt_node = context->crnt_node->parent;
     next_parse_state( context );
     }
-else if( ( ',' == context->crnt_posn[0] ) && ( node_is_object( context->crnt_node->parent ) ) )
+else if( ( ',' == context->crnt_posn[0] ) && ( parent_node_is_object( context->crnt_node ) ) )
     {
     // We've found another key/value pair in the object, move past the ','
+    // and prepare to parse the next value in the object.
     context->crnt_posn++;
 
-    next_object_item = new_node( &context->hooks );
-    if( NULL == next_object_item )
+    crnt_node_add_sibling( context );
+    if( PARSE_STATE_ERROR != context->state )
         {
-        context->state = PARSE_STATE_ERROR;
-        }
-    else
-        {
-        next_object_item->parent = context->crnt_node->parent;
-        next_object_item->prev   = context->crnt_node;
-        context->crnt_node->next = next_object_item;
-        context->crnt_node       = next_object_item;
-        context->state           = PARSE_STATE_OBJECT_KEY;
+        context->state = PARSE_STATE_OBJECT_KEY;
         }
     }
 else
@@ -555,12 +607,12 @@ else if( ( NULL == context->crnt_node->parent ) && ( '\0' == context->crnt_posn[
     // We just finished parsing the top-level value so we're done. Hurray!
     context->state = PARSE_STATE_COMPLETE;
     }
-else if( node_is_array( context->crnt_node->parent ) )
+else if( parent_node_is_array( context->crnt_node ) )
     {
     // The value we finished parsing is contained within an array
     context->state = PARSE_STATE_NEXT_ARRAY_VALUE;
     }
-else if( node_is_object( context->crnt_node->parent ) )
+else if( parent_node_is_object( context->crnt_node ) )
     {
     // The value we finished parsing is contained within an object
     context->state = PARSE_STATE_NEXT_OBJECT_VALUE;
@@ -569,6 +621,37 @@ else
     {
     context->state = PARSE_STATE_ERROR;
     }
+}
+
+
+/**********************************************************
+*	parent_node_is_array
+*
+*	Returns 1 if the provided node's parent is an array.
+*
+**********************************************************/
+static int __inline parent_node_is_array
+    (
+    cJSON const * node
+    )
+{
+return ( ( NULL != node->parent) && ( cJSON_Array == node->parent->type ) );
+}
+
+
+
+/**********************************************************
+*	parent_node_is_array
+*
+*	Returns 1 if the provided node's parent is an object.
+*
+**********************************************************/
+static int __inline parent_node_is_object
+    (
+    cJSON const * node
+    )
+{
+return ( ( NULL != node->parent) && ( cJSON_Object == node->parent->type ) );
 }
 
 
@@ -629,8 +712,6 @@ static void parse_array
     parse_context * context
     )
 {
-cJSON * array_item;
-
 context->crnt_node->type = cJSON_Array;
 
 // Move past the opening '[' of the array.
@@ -650,17 +731,10 @@ else
     {
     // This array contains values, prepare to parse the
     // first value of the array
-    array_item = new_node( &context->hooks );
-    if( NULL == array_item )
+    crnt_node_add_child( context );
+    if( PARSE_STATE_ERROR != context->state )
         {
-        context->state = PARSE_STATE_ERROR;
-        }
-    else
-        {
-        array_item->parent        = context->crnt_node;
-        context->crnt_node->child = array_item;
-        context->crnt_node        = array_item;
-        context->state            = PARSE_STATE_VALUE;
+        context->state = PARSE_STATE_VALUE;
         }
     }
 }
@@ -740,8 +814,6 @@ static void parse_object
     parse_context * context
     )
 {
-cJSON * object_item;
-
 context->crnt_node->type = cJSON_Object;
 
 // Move past the opening '}'
@@ -759,17 +831,10 @@ if( '}' == context->crnt_posn[0] )
 else
     {
     // Prepare to parse this object's first value
-    object_item = new_node( &context->hooks );
-    if( NULL == object_item )
+    crnt_node_add_child( context );
+    if( PARSE_STATE_ERROR != context->state )
         {
-        context->state = PARSE_STATE_ERROR;
-        }
-    else
-        {
-        object_item->parent       = context->crnt_node;
-        context->crnt_node->child = object_item;
-        context->crnt_node        = object_item;
-        context->state            = PARSE_STATE_OBJECT_KEY;
+        context->state = PARSE_STATE_OBJECT_KEY;
         }
     }
 }
