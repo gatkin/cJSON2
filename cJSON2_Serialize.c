@@ -83,6 +83,11 @@ static void serialize_object_key
     serialize_context * context
     );
 
+static void serialize_string
+    (
+    serialize_context * context
+    );
+
 static void serialize_value
     (
     serialize_context * context
@@ -519,6 +524,31 @@ else
 
 
 /**********************************************************
+*	serialize_string
+*
+*
+*
+**********************************************************/
+static void serialize_string
+    (
+    serialize_context * context
+    )
+{
+int success;
+
+// Add the string to the buffer, surrounded by quotes.
+success = ( -1 != string_add_to_buffer( context, "\"", 1 ) );
+success = ( success ) && ( -1 != string_add_to_buffer( context, context->crnt_node->valuestring, strlen( context->crnt_node->valuestring ) ) );
+success = ( success ) && ( -1 != string_add_to_buffer( context, "\"", 1 ) );
+
+if( success )
+    {
+    next_serialize_state( context );
+    }
+}
+
+
+/**********************************************************
 *	serialize_value
 *
 *	Serializes a JSON value
@@ -552,8 +582,7 @@ switch ( context->crnt_node->type )
         break;
 
     case cJSON_String:
-        string_add_to_buffer( context, context->crnt_node->string, strlen( context->crnt_node->string ) );
-        next_serialize_state( context );
+        serialize_string( context );
         break;
 
     case cJSON_Array:

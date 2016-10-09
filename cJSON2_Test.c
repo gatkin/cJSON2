@@ -27,6 +27,12 @@ typedef struct
     double          exptd_value;
     } parse_number_test_case;
 
+
+static int serialize_test_case_run
+    (
+    char const * original_json
+    );
+
 static int test_get_object_item
     (
     void
@@ -58,9 +64,9 @@ static int test_parse_number
     );
 
 static int test_parse_object_simple_values
-(
-void
-);
+    (
+    void
+    );
 
 static int test_parse_object_empty
     (
@@ -112,6 +118,16 @@ static int test_serialize_object_simple_values
     void
     );
 
+static int test_serialize_string
+    (
+    void
+    );
+
+static int test_serialize_string_empty
+    (
+    void
+    );
+
 static int test_serialize_true
     (
     void
@@ -158,6 +174,8 @@ test tests[] =
     {   "Serialize null",                   test_serialize_null                 },
     {   "Serialize empty object",           test_serialize_object_empty         },
     {   "Serialize simple-valued object",   test_serialize_object_simple_values },
+    {   "Serialize string",                 test_serialize_string               },
+    {   "Serialize empty string",           test_serialize_string_empty         },
     {   "Serialize true",                   test_serialize_true                 },
     };
 
@@ -185,6 +203,43 @@ for( i = 0; i < num_tests; i++ )
 
 printf( "%d PASSED, %d FAILED\n", num_passed, num_failed );
 }
+
+
+/**********************************************************
+*	serialize_test_case_run
+*
+*	Runs a serialization test case. Returns 1 if the test
+*	passes, 0 if it fails.
+*
+**********************************************************/
+static int serialize_test_case_run
+    (
+    char const * original_json
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_json;
+size_t  original_json_len;
+
+original_json_len = strlen( original_json );
+
+json = cJSON_Parse( original_json );
+serialized_json = cJSON_Print( json );
+
+did_pass = ( NULL != serialized_json );
+did_pass = ( did_pass ) && ( 0 == strncmp( original_json, serialized_json, original_json_len ) );
+
+// Make sure that a null-terminator was added at the end of the serialized string
+did_pass = ( did_pass ) && ( '\0' == serialized_json[original_json_len] );
+
+// Clean up.
+cJSON_Delete( json );
+free( serialized_json );
+
+return  did_pass;
+}
+
 
 /**********************************************************
 *	test_get_object_item
@@ -567,21 +622,7 @@ static int test_serialize_array_empty
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *  serialized_array;
-
-json = cJSON_Parse( "[]" );
-serialized_array = cJSON_Print( json );
-
-did_pass = ( NULL != serialized_array );
-did_pass = ( did_pass ) && ( 0 == strncmp( "[]", serialized_array, 2 ) );
-did_pass = ( did_pass ) && ( 2 == strnlen(serialized_array, 3 ) );
-
-cJSON_Delete( json );
-free( serialized_array );
-
-return did_pass;
+return serialize_test_case_run( "[]" );
 }
 
 
@@ -596,24 +637,7 @@ static int test_serialize_array_simple_values
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *  serialized_array;
-
-char const * original_array = "[null,true,[],false,{}]";
-size_t original_array_len = strlen( original_array );
-
-json = cJSON_Parse( original_array );
-serialized_array = cJSON_Print( json );
-
-did_pass = ( NULL != serialized_array );
-did_pass = ( did_pass ) && ( 0 == strncmp( original_array, serialized_array, original_array_len ) );
-did_pass = ( did_pass ) && ( original_array_len == strnlen(serialized_array, original_array_len + 1 ) );
-
-cJSON_Delete( json );
-free( serialized_array );
-
-return did_pass;
+return serialize_test_case_run( "[null,true,[],false,{},\"hello\"]" );
 }
 
 
@@ -628,21 +652,7 @@ static int test_serialize_false
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *  serialized_json;
-
-json = cJSON_Parse( "false" );
-serialized_json = cJSON_Print( json );
-
-did_pass = ( NULL != serialized_json );
-did_pass = ( did_pass ) && ( 0 == strncmp( "false", serialized_json, 5 ) );
-did_pass = ( did_pass ) && ( 5 == strnlen( serialized_json, 6 ) );
-
-cJSON_Delete( json );
-free( serialized_json );
-
-return did_pass;
+return serialize_test_case_run( "false" );
 }
 
 
@@ -657,21 +667,7 @@ static int test_serialize_null
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *  serialized_json;
-
-json = cJSON_Parse( "null" );
-serialized_json = cJSON_Print( json );
-
-did_pass = ( NULL != serialized_json );
-did_pass = ( did_pass ) && ( 0 == strncmp( "null", serialized_json, 4 ) );
-did_pass = ( did_pass ) && ( 4 == strnlen( serialized_json, 5 ) );
-
-cJSON_Delete( json );
-free( serialized_json );
-
-return did_pass;
+return serialize_test_case_run( "null" );
 }
 
 
@@ -686,24 +682,8 @@ static int test_serialize_object_simple_values
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *  serialized_object;
-
-char const * original_object = "{\"nullKey\":null,\"trueKey\":true,\"arrayKey\":[],\"falseKey\":false,\"objectKey\":{}}";
-size_t original_object_len = strlen( original_object );
-
-json = cJSON_Parse( original_object );
-serialized_object = cJSON_Print( json );
-
-did_pass = (NULL != serialized_object);
-did_pass = ( did_pass ) && ( 0 == strncmp( original_object, serialized_object, original_object_len ) );
-did_pass = ( did_pass ) && (original_object_len == strnlen( serialized_object, original_object_len + 1 ) );
-
-cJSON_Delete( json );
-free( serialized_object );
-
-return did_pass;
+return serialize_test_case_run( "{\"nullKey\":null,\"trueKey\":true,"
+    "\"arrayKey\":[],\"falseKey\":false,\"objectKey\":{},\"stringKey\":\"Hello\"}" );
 }
 
 
@@ -718,21 +698,37 @@ static int test_serialize_object_empty
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *serialized_object;
+return  serialize_test_case_run( "{}" );
+}
 
-json = cJSON_Parse( "{}" );
-serialized_object = cJSON_Print( json );
 
-did_pass = (NULL != serialized_object);
-did_pass = ( did_pass ) && ( 0 == strncmp( "{}", serialized_object, 2 ) );
-did_pass = ( did_pass ) && ( 2 == strnlen( serialized_object, 3 ) );
+/**********************************************************
+*	test_serialize_string
+*
+*	Tests serializing a string.
+*
+**********************************************************/
+static int test_serialize_string
+    (
+    void
+    )
+{
+return serialize_test_case_run( "\"Hello, world!\"" );
+}
 
-cJSON_Delete( json );
-free( serialized_object );
 
-return did_pass;
+/**********************************************************
+*	test_serialize_string_empty
+*
+*	Tests serializing an empty string.
+*
+**********************************************************/
+static int test_serialize_string_empty
+    (
+    void
+    )
+{
+return serialize_test_case_run( "\"\"" );
 }
 
 
@@ -747,19 +743,5 @@ static int test_serialize_true
     void
     )
 {
-int     did_pass;
-cJSON * json;
-char *  serialized_json;
-
-json = cJSON_Parse( "true" );
-serialized_json = cJSON_Print( json );
-
-did_pass = ( NULL != serialized_json );
-did_pass = ( did_pass ) && ( 0 == strncmp( "true", serialized_json, 4 ) );
-did_pass = ( did_pass ) && ( 4 == strnlen( serialized_json, 5 ) );
-
-cJSON_Delete( json );
-free( serialized_json );
-
-return did_pass;
+return serialize_test_case_run( "true" );
 }
