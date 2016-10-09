@@ -1,7 +1,7 @@
 #include <string.h>
 
 #include "cJSON2.h"
-
+#include "cJSON2_private.h"
 
 #define INITIAL_BUFFER_SIZE     ( 10 )
 
@@ -11,8 +11,6 @@ Private Types
 typedef enum
     {
     SERIALIZE_STATE_VALUE,
-    SERIALIZE_STATE_ARRAY,
-    SERIALIZE_STATE_OBJECT,
     SERIALIZE_STATE_NEXT_ARRAY_VALUE,
     SERIALIZE_STATE_NEXT_OBJECT_VALUE,
     SERIALIZE_STATE_ERROR,
@@ -44,6 +42,11 @@ static void buffer_grow
     int                 growth_increment
     );
 
+static void next_array_value
+    (
+    serialize_context * context
+    );
+
 static void next_serialize_state
     (
     serialize_context * context
@@ -55,6 +58,11 @@ static void serialize
     );
 
 static void serialize_context_init
+    (
+    serialize_context * context
+    );
+
+static void serialize_array
     (
     serialize_context * context
     );
@@ -188,7 +196,7 @@ static void buffer_grow
     int                 growth_increment
     )
 {
-int     new_buffer_len;
+size_t     new_buffer_len;
 char *  new_buffer;
 
 new_buffer_len = context->buffer_len + growth_increment;
@@ -202,6 +210,46 @@ else
     {
     context->buffer     = new_buffer;
     context->buffer_len = new_buffer_len;
+    }
+}
+
+
+/**********************************************************
+*	next_array_value
+*
+*	Prepares to serialize the next value in an array
+*
+**********************************************************/
+static void next_array_value
+    (
+    serialize_context * context
+    )
+{
+if( !parent_node_is_array( context->crnt_node ) )
+    {
+    // We should never get here.
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+else if( NULL == context->crnt_node->next )
+    {
+    // We've come to the end of the array.
+    string_add_to_buffer( context, "]", 1 );
+
+    // Move back up to the containing array.
+    context->crnt_node = context->crnt_node->parent;
+    next_serialize_state( context );
+    }
+else
+    {
+    // More values in the array to serialize
+    string_add_to_buffer( context, ",", 1 );
+
+    // Move on to serializing the next value in the array.
+    if( SERIALIZE_STATE_ERROR != context->state )
+        {
+        context->crnt_node = context->crnt_node->next;
+        context->state     = SERIALIZE_STATE_VALUE;
+        }
     }
 }
 
@@ -269,6 +317,10 @@ while( ( SERIALIZE_STATE_ERROR != context->state ) && ( SERIALIZE_STATE_COMPLETE
             serialize_value( context );
             break;
 
+        case SERIALIZE_STATE_NEXT_ARRAY_VALUE:
+            next_array_value( context );
+            break;
+
         default:
             // Shouldn't get here
             context->state = SERIALIZE_STATE_ERROR;
@@ -311,6 +363,38 @@ memset( &context->hooks, 0, sizeof( context->hooks ) );
 
 
 /**********************************************************
+*	serialize_array
+*
+*	Sets up the provided context to serialize an array
+*
+**********************************************************/
+static void serialize_array
+    (
+    serialize_context * context
+    )
+{
+if( NULL == context->crnt_node->child )
+    {
+    // This is an empty array.
+    string_add_to_buffer( context, "[]", 2 );
+    next_serialize_state( context );
+    }
+else
+    {
+    // This array has values.
+    string_add_to_buffer( context, "[", 1 );
+
+    // Move on to serializing this array's children
+    if( SERIALIZE_STATE_ERROR != context->state )
+        {
+        context->crnt_node = context->crnt_node->child;
+        context->state = SERIALIZE_STATE_VALUE;
+        }
+    }
+}
+
+
+/**********************************************************
 *	serialize_value
 *
 *	Serializes a JSON value
@@ -344,13 +428,12 @@ switch ( context->crnt_node->type )
         break;
 
     case cJSON_String:
-        // TODO:
-        context->state = SERIALIZE_STATE_ERROR;
+        string_add_to_buffer( context, context->crnt_node->string, strlen( context->crnt_node->string ) );
+        next_serialize_state( context );
         break;
 
     case cJSON_Array:
-        // TODO:
-        context->state = SERIALIZE_STATE_ERROR;
+        serialize_array( context );
         break;
 
     case cJSON_Object:

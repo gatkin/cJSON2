@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "cJSON2.h"
+#include "cJSON2_private.h"
 
 /****************************************
 Private Types
@@ -60,16 +61,6 @@ static void next_object_value
 static void next_parse_state
     (
     parse_context * context
-    );
-
-static int __inline parent_node_is_array
-    (
-    cJSON const * node
-    );
-
-static int __inline parent_node_is_object
-    (
-    cJSON const * node
     );
 
 static void parse
@@ -513,7 +504,12 @@ static void next_array_value
 {
 context->crnt_posn = skip_whitespace( context->crnt_posn );
 
-if( ( ']' == context->crnt_posn[0] ) && ( parent_node_is_array( context->crnt_node ) ) )
+if( !parent_node_is_array( context->crnt_node ) )
+    {
+    // We should never get here
+    context->state = PARSE_STATE_ERROR;
+    }
+else if( ']' == context->crnt_posn[0] )
     {
     // We've come to the end of an array. Move past the ']'.
     context->crnt_posn++;
@@ -522,7 +518,7 @@ if( ( ']' == context->crnt_posn[0] ) && ( parent_node_is_array( context->crnt_no
     context->crnt_node = context->crnt_node->parent;
     next_parse_state( context );
     }
-else if( ( ',' ==  context->crnt_posn[0] ) && ( parent_node_is_array( context->crnt_node ) ) )
+else if( ',' ==  context->crnt_posn[0] )
     {
     // We found another value in the array, move past the ',' and prepare to parse the
     // next value in the array.
@@ -556,7 +552,12 @@ static void next_object_value
 {
 context->crnt_posn = skip_whitespace( context->crnt_posn );
 
-if( ( '}' == context->crnt_posn[0] ) && ( parent_node_is_object( context->crnt_node ) ) )
+if( !parent_node_is_object( context->crnt_node ) )
+    {
+    // We should never get here.
+    context->state = PARSE_STATE_ERROR;
+    }
+else if( '}' == context->crnt_posn[0] )
     {
     // We've reached the end of an object. Move past the closing '}'.
     context->crnt_posn++;
@@ -565,7 +566,7 @@ if( ( '}' == context->crnt_posn[0] ) && ( parent_node_is_object( context->crnt_n
     context->crnt_node = context->crnt_node->parent;
     next_parse_state( context );
     }
-else if( ( ',' == context->crnt_posn[0] ) && ( parent_node_is_object( context->crnt_node ) ) )
+else if( ',' == context->crnt_posn[0] )
     {
     // We've found another key/value pair in the object, move past the ','
     // and prepare to parse the next value in the object.
@@ -621,37 +622,6 @@ else
     {
     context->state = PARSE_STATE_ERROR;
     }
-}
-
-
-/**********************************************************
-*	parent_node_is_array
-*
-*	Returns 1 if the provided node's parent is an array.
-*
-**********************************************************/
-static int __inline parent_node_is_array
-    (
-    cJSON const * node
-    )
-{
-return ( ( NULL != node->parent) && ( cJSON_Array == node->parent->type ) );
-}
-
-
-
-/**********************************************************
-*	parent_node_is_array
-*
-*	Returns 1 if the provided node's parent is an object.
-*
-**********************************************************/
-static int __inline parent_node_is_object
-    (
-    cJSON const * node
-    )
-{
-return ( ( NULL != node->parent) && ( cJSON_Object == node->parent->type ) );
 }
 
 

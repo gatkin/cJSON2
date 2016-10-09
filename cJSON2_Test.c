@@ -82,6 +82,16 @@ static int test_parse_true
     void
     );
 
+static int test_serialize_array_empty
+    (
+    void
+    );
+
+static int test_serialize_array_simple_values
+    (
+    void
+    );
+
 static int test_serialize_false
     (
     void
@@ -121,20 +131,22 @@ char const * TEST_FAILED = "FAILED";
 
 test tests[] =
     {/*     description,                    test_func                       */
-    {   "Get object items",             test_get_object_item            },
-    {   "Parse empty array",            test_parse_array_empty          },
-    {   "Parse simple-valued array",    test_parse_array_simple_values  },
-    {   "Parse false",                  test_parse_false                },
-    {   "Parse null",                   test_parse_null                 },
-    {   "Parse number",                 test_parse_number               },
-    {   "Parse object",                 test_parse_object               },
-    {   "Parse empty object",           test_parse_object_empty         },
-    {   "Parse string",                 test_parse_string               },
-    {   "Parse empty string",           test_parse_string_empty         },
-    {   "Parse true",                   test_parse_true                 },
-    {   "Serialize false",              test_serialize_false            },
-    {   "Serialize null",               test_serialize_null             },
-    {   "Serialize true",               test_serialize_true             },
+    {   "Get object items",                 test_get_object_item                },
+    {   "Parse empty array",                test_parse_array_empty              },
+    {   "Parse simple-valued array",        test_parse_array_simple_values      },
+    {   "Parse false",                      test_parse_false                    },
+    {   "Parse null",                       test_parse_null                     },
+    {   "Parse number",                     test_parse_number                   },
+    {   "Parse object",                     test_parse_object                   },
+    {   "Parse empty object",               test_parse_object_empty             },
+    {   "Parse string",                     test_parse_string                   },
+    {   "Parse empty string",               test_parse_string_empty             },
+    {   "Parse true",                       test_parse_true                     },
+    {   "Serialize empty array",            test_serialize_array_empty          },
+    {   "Serialize simple-valued array",    test_serialize_array_simple_values  },
+    {   "Serialize false",                  test_serialize_false                },
+    {   "Serialize null",                   test_serialize_null                 },
+    {   "Serialize true",                   test_serialize_true                 },
     };
 
 num_tests  = cnt_of_array( tests );
@@ -529,6 +541,68 @@ did_pass = ( did_pass ) && ( cJSON_True == json->type );
 cJSON_Delete( json );
 
 return did_pass;
+}
+
+
+/**********************************************************
+*	test_serialize_array_empty
+*
+*	Tests serializing an empty array.
+*
+**********************************************************/
+static int test_serialize_array_empty
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_array;
+
+json = cJSON_Parse( "[]" );
+serialized_array = cJSON_Print( json );
+
+did_pass = ( NULL != serialized_array );
+did_pass = ( did_pass ) && ( 0 == strncmp( "[]", serialized_array, 2 ) );
+did_pass = ( did_pass ) && ( 2 == strnlen(serialized_array, 3 ) );
+
+cJSON_Delete( json );
+free( serialized_array );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_serialize_array_simple_values
+*
+*	Tests serializing an array with simple values.
+*
+**********************************************************/
+static int test_serialize_array_simple_values
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_array;
+
+char const * original_array = "[null,true,[],false]";
+int original_array_len = strlen( original_array );
+
+json = cJSON_Parse( original_array );
+serialized_array = cJSON_Print( json );
+
+did_pass = ( NULL != serialized_array );
+did_pass = ( did_pass ) && ( 0 == strncmp( original_array, serialized_array, original_array_len ) );
+did_pass = ( did_pass ) && ( original_array_len == strnlen(serialized_array, original_array_len + 1 ) );
+
+cJSON_Delete( json );
+free( serialized_array );
+
+return did_pass;
+
 }
 
 

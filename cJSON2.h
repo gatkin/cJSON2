@@ -1,5 +1,5 @@
-#ifndef cJSON_h
-#define cJSON_h
+#ifndef cJSON2_h
+#define cJSON2_h
 
 #ifdef __cplusplus
 extern "C"
