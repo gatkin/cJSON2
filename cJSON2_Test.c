@@ -82,9 +82,20 @@ static int test_parse_true
     void
     );
 
+static int test_serialize_false
+    (
+    void
+    );
 
-static char const * TEST_PASSED = "PASSED";
-static char const * TEST_FAILED = "FAILED";
+static int test_serialize_null
+    (
+    void
+    );
+
+static int test_serialize_true
+    (
+    void
+    );
 
 
 /**********************************************************
@@ -105,6 +116,9 @@ int             i;
 int             did_pass;
 char const *    test_result;
 
+char const * TEST_PASSED = "PASSED";
+char const * TEST_FAILED = "FAILED";
+
 test tests[] =
     {/*     description,                    test_func                       */
     {   "Get object items",             test_get_object_item            },
@@ -118,6 +132,9 @@ test tests[] =
     {   "Parse string",                 test_parse_string               },
     {   "Parse empty string",           test_parse_string_empty         },
     {   "Parse true",                   test_parse_true                 },
+    {   "Serialize false",              test_serialize_false            },
+    {   "Serialize null",               test_serialize_null             },
+    {   "Serialize true",               test_serialize_true             },
     };
 
 num_tests  = cnt_of_array( tests );
@@ -512,4 +529,91 @@ did_pass = ( did_pass ) && ( cJSON_True == json->type );
 cJSON_Delete( json );
 
 return did_pass;
-} 
+}
+
+
+/**********************************************************
+*	test_serialize_false
+*
+*	Tests serializing a simple false JSON value.
+*
+**********************************************************/
+static int test_serialize_false
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_json;
+
+json = cJSON_Parse( "false" );
+serialized_json = cJSON_Print( json );
+
+did_pass = ( NULL != serialized_json );
+did_pass = ( did_pass ) && ( 0 == strncmp( "false", serialized_json, 5 ) );
+did_pass = ( did_pass ) && ( 5 == strnlen( serialized_json, 6 ) );
+
+cJSON_Delete( json );
+free( serialized_json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_serialize_null
+*
+*	Tests serializing a simple null JSON value.
+*
+**********************************************************/
+static int test_serialize_null
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_json;
+
+json = cJSON_Parse( "null" );
+serialized_json = cJSON_Print( json );
+
+did_pass = ( NULL != serialized_json );
+did_pass = ( did_pass ) && ( 0 == strncmp( "null", serialized_json, 4 ) );
+did_pass = ( did_pass ) && ( 4 == strnlen( serialized_json, 5 ) );
+
+cJSON_Delete( json );
+free( serialized_json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_serialize_true
+*
+*	Tests serializing a simple true JSON value.
+*
+**********************************************************/
+static int test_serialize_true
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_json;
+
+json = cJSON_Parse( "true" );
+serialized_json = cJSON_Print( json );
+
+did_pass = ( NULL != serialized_json );
+did_pass = ( did_pass ) && ( 0 == strncmp( "true", serialized_json, 4 ) );
+did_pass = ( did_pass ) && ( 4 == strnlen( serialized_json, 5 ) );
+
+cJSON_Delete( json );
+free( serialized_json );
+
+return did_pass;
+}

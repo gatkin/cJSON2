@@ -3,6 +3,8 @@
 #include "cJSON2.h"
 
 
+#define INITIAL_BUFFER_SIZE     ( 10 )
+
 /****************************************
 Private Types
 ****************************************/
@@ -11,14 +13,17 @@ typedef enum
     SERIALIZE_STATE_VALUE,
     SERIALIZE_STATE_ARRAY,
     SERIALIZE_STATE_OBJECT,
+    SERIALIZE_STATE_NEXT_ARRAY_VALUE,
+    SERIALIZE_STATE_NEXT_OBJECT_VALUE,
     SERIALIZE_STATE_ERROR,
+    SERIALIZE_STATE_COMPLETE,
     } serialize_state;
 
 typedef struct
     {
-    char *          buffer;
+    char *          buffer;         // Note: the buffer does not contain a null-terminator until parsing completes
     int             buffer_len;
-    int             buffer_posn;
+    int             buffer_posn;    // The index of the next open position in the buffer
     cJSON_Hooks     hooks;
     cJSON const *   crnt_node;
     serialize_state state;
@@ -28,6 +33,22 @@ typedef struct
 /****************************************
 Private Function Declarations
 ****************************************/
+static void buffer_finalize
+    (
+    serialize_context * context
+    );
+
+static void buffer_grow
+    (
+    serialize_context * context,
+    int                 growth_increment
+    );
+
+static void next_serialize_state
+    (
+    serialize_context * context
+    );
+
 static void serialize
     (
     serialize_context * context
@@ -41,6 +62,13 @@ static void serialize_context_init
 static void serialize_value
     (
     serialize_context * context
+    );
+
+static void string_add_to_buffer
+    (
+    serialize_context * context,
+    char const *        string,
+    int                 string_len
     );
 
 
@@ -59,8 +87,9 @@ char * cJSON_Print
 {
 cJSON_Hooks default_hooks;
 
-default_hooks.free_fn   = free;
-default_hooks.malloc_fn = malloc;
+default_hooks.malloc_fn  = malloc;
+default_hooks.realloc_fn = realloc;
+default_hooks.free_fn    = free;
 
 return cJSON_PrintWithHooks( json, &default_hooks );
 }
@@ -86,24 +115,130 @@ serialize_context   context;
 serialized_json = NULL;
 serialize_context_init( &context );
 
-context.hooks.malloc_fn = hooks->malloc_fn;
-context.hooks.free_fn   = hooks->free_fn;
-context.crnt_node       = json;
-context.state           = SERIALIZE_STATE_VALUE;
+context.hooks.malloc_fn  = hooks->malloc_fn;
+context.hooks.realloc_fn = hooks->realloc_fn;
+context.hooks.free_fn    = hooks->free_fn;
+context.crnt_node        = json;
+context.state            = SERIALIZE_STATE_VALUE;
 
-serialize( &context );
-
-if( SERIALIZE_STATE_ERROR == context.state )
+if( NULL != json)
     {
-    // Clean up if an error occurred.
-    free( context.buffer );
-    }
-else
-    {
+    serialize( &context );
     serialized_json = context.buffer;
     }
 
 return serialized_json;
+}
+
+
+/**********************************************************
+*	buffer_finalize
+*
+*	Finalizes the provided context's buffer by ensuring it
+*	is null-terminated and that it takes only the memory it
+*	needs.
+*
+**********************************************************/
+static void buffer_finalize
+    (
+    serialize_context * context
+    )
+{
+int shrink_amount;
+
+if( context->buffer_posn > context->buffer_len )
+    {
+    // Should never get here
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+else if( ( context->buffer_len == context->buffer_posn ) )
+    {
+    // Need one more space for the NULL terminator.
+    buffer_grow( context, 1 );
+    }
+else if( context->buffer_len > context->buffer_posn )
+    {
+    // Need to shrink the buffer so that it is just large enough to hold
+    // all characters plus the null-terminator.
+    shrink_amount = context->buffer_len - ( context->buffer_posn + 1 );
+    buffer_grow( context, -shrink_amount );
+    }
+
+// Finally, add the null-terminator
+if( SERIALIZE_STATE_ERROR != context->state )
+    {
+    context->buffer[context->buffer_posn] = '\0';
+    context->buffer_posn++;
+    }
+}
+
+
+/**********************************************************
+*	buffer_grow
+*
+*	Grows the provided context's buffer by the provided
+ *	increment. If an error occurs, this will set the context's
+*	state to SERIALIZE_STATE_ERROR and the context's buffer
+*	will remain untouched.
+*
+**********************************************************/
+static void buffer_grow
+    (
+    serialize_context * context,
+    int                 growth_increment
+    )
+{
+int     new_buffer_len;
+char *  new_buffer;
+
+new_buffer_len = context->buffer_len + growth_increment;
+new_buffer = context->hooks.realloc_fn( context->buffer, new_buffer_len );
+
+if( NULL == new_buffer )
+    {
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+else
+    {
+    context->buffer     = new_buffer;
+    context->buffer_len = new_buffer_len;
+    }
+}
+
+
+/**********************************************************
+*	next_serialize_state
+*
+*	Set the next serialize state. This should be called after
+*	successfully completing parsing a value.
+*
+**********************************************************/
+static void next_serialize_state
+    (
+    serialize_context * context
+    )
+{
+if( SERIALIZE_STATE_ERROR == context->state )
+    {
+    // Shouldn't get here. If we do it's an error so leave the state
+    // alone.
+    }
+else if( NULL == context->crnt_node->parent )
+    {
+    context->state = SERIALIZE_STATE_COMPLETE;
+    }
+else if( cJSON_Array == context->crnt_node->parent->type )
+    {
+    context->state = SERIALIZE_STATE_NEXT_ARRAY_VALUE;
+    }
+else if( cJSON_Object == context->crnt_node->parent->type )
+    {
+    context->state = SERIALIZE_STATE_NEXT_OBJECT_VALUE;
+    }
+else
+    {
+    context->state = SERIALIZE_STATE_ERROR;
+    }
 }
 
 
@@ -118,6 +253,39 @@ static void serialize
     serialize_context * context
     )
 {
+// Initialize the buffer to a default initial size.
+context->buffer_len = INITIAL_BUFFER_SIZE;
+context->buffer     = context->hooks.malloc_fn( INITIAL_BUFFER_SIZE );
+if( NULL == context->buffer )
+    {
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+
+while( ( SERIALIZE_STATE_ERROR != context->state ) && ( SERIALIZE_STATE_COMPLETE != context->state ) )
+    {
+    switch (context->state)
+        {
+        case SERIALIZE_STATE_VALUE:
+            serialize_value( context );
+            break;
+
+        default:
+            // Shouldn't get here
+            context->state = SERIALIZE_STATE_ERROR;
+        }
+    }
+
+if( SERIALIZE_STATE_ERROR != context->state )
+    {
+    buffer_finalize( context );
+    }
+
+// Clean up on error
+if( SERIALIZE_STATE_COMPLETE != context->state )
+    {
+    context->hooks.free_fn( context->buffer );
+    context->buffer = NULL;
+    }
 
 }
 
@@ -153,6 +321,75 @@ static void serialize_value
     serialize_context * context
     )
 {
+switch ( context->crnt_node->type )
+    {
+    case cJSON_True:
+        string_add_to_buffer( context, "true", 4 );
+        next_serialize_state( context );
+        break;
+
+    case cJSON_False:
+        string_add_to_buffer(context, "false", 5 );
+        next_serialize_state( context );
+        break;
+
+    case cJSON_Null:
+        string_add_to_buffer( context, "null", 4 );
+        next_serialize_state( context );
+        break;
+
+    case cJSON_Number:
+        // TODO:
+        context->state = SERIALIZE_STATE_ERROR;
+        break;
+
+    case cJSON_String:
+        // TODO:
+        context->state = SERIALIZE_STATE_ERROR;
+        break;
+
+    case cJSON_Array:
+        // TODO:
+        context->state = SERIALIZE_STATE_ERROR;
+        break;
+
+    case cJSON_Object:
+        // TODO:
+        context->state = SERIALIZE_STATE_ERROR;
+        break;
+
+    default:
+        // Shouldn't get here
+        context->state = SERIALIZE_STATE_ERROR;
+    }
+}
 
 
+/**********************************************************
+*	string_add_to_buffer
+*
+*	Adds the provided string to the end of the provided
+*	serialize context's buffer. If the context's buffer
+*	does not have enough room to hold the string, this will
+*	reallocate the buffer to be twice as large.
+*
+**********************************************************/
+static void string_add_to_buffer
+    (
+    serialize_context * context,
+    char const *        string,
+    int                 string_len
+    )
+{
+// Double the buffer if it is not large enough to hold the provided string.
+if( ( context->buffer_posn + string_len ) > context->buffer_len )
+    {
+    buffer_grow( context, 2 * context->buffer_len );
+    }
+
+if( SERIALIZE_STATE_ERROR != context->state )
+    {
+    strncpy( &context->buffer[context->buffer_posn], string, string_len );
+    context->buffer_posn += string_len;
+    }
 }
