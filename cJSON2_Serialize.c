@@ -13,6 +13,7 @@ typedef enum
     SERIALIZE_STATE_VALUE,
     SERIALIZE_STATE_NEXT_ARRAY_VALUE,
     SERIALIZE_STATE_NEXT_OBJECT_VALUE,
+    SERIALIZE_STATE_OBJECT_KEY,
     SERIALIZE_STATE_ERROR,
     SERIALIZE_STATE_COMPLETE,
     } serialize_state;
@@ -47,6 +48,11 @@ static void next_array_value
     serialize_context * context
     );
 
+static void next_object_value
+    (
+    serialize_context * context
+    );
+
 static void next_serialize_state
     (
     serialize_context * context
@@ -67,12 +73,22 @@ static void serialize_array
     serialize_context * context
     );
 
+static void serialize_object
+    (
+    serialize_context * context
+    );
+
+static void serialize_object_key
+    (
+    serialize_context * context
+    );
+
 static void serialize_value
     (
     serialize_context * context
     );
 
-static void string_add_to_buffer
+static int string_add_to_buffer
     (
     serialize_context * context,
     char const *        string,
@@ -196,7 +212,7 @@ static void buffer_grow
     int                 growth_increment
     )
 {
-size_t     new_buffer_len;
+size_t  new_buffer_len;
 char *  new_buffer;
 
 new_buffer_len = context->buffer_len + growth_increment;
@@ -242,13 +258,50 @@ else if( NULL == context->crnt_node->next )
 else
     {
     // More values in the array to serialize
-    string_add_to_buffer( context, ",", 1 );
-
-    // Move on to serializing the next value in the array.
-    if( SERIALIZE_STATE_ERROR != context->state )
+    if( -1 != string_add_to_buffer( context, ",", 1 ) )
         {
+        // Move on to serializing the next value in the array.
         context->crnt_node = context->crnt_node->next;
         context->state     = SERIALIZE_STATE_VALUE;
+        }
+    }
+}
+
+
+/**********************************************************
+*	next_object_value
+*
+*	Sets up the provided context to serialize the next object
+*	value.
+*
+**********************************************************/
+static void next_object_value
+    (
+    serialize_context * context
+    )
+{
+if( !parent_node_is_object( context->crnt_node ) )
+    {
+    // We should never get here.
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+else if( NULL == context->crnt_node->next )
+    {
+    // Done serializing the object.
+    string_add_to_buffer( context, "}", 1 );
+
+    // Move back up to the containing object.
+    context->crnt_node = context->crnt_node->parent;
+    next_serialize_state( context );
+    }
+else
+    {
+    // There are more values in the object to serialize.
+    if( -1 != string_add_to_buffer( context, ",", 1 ) )
+        {
+        // Move on to serializing the next value in the object.
+        context->crnt_node = context->crnt_node->next;
+        context->state     = SERIALIZE_STATE_OBJECT_KEY;
         }
     }
 }
@@ -268,8 +321,7 @@ static void next_serialize_state
 {
 if( SERIALIZE_STATE_ERROR == context->state )
     {
-    // Shouldn't get here. If we do it's an error so leave the state
-    // alone.
+    // Don't touch the state, leave it as an error.
     }
 else if( NULL == context->crnt_node->parent )
     {
@@ -317,13 +369,22 @@ while( ( SERIALIZE_STATE_ERROR != context->state ) && ( SERIALIZE_STATE_COMPLETE
             serialize_value( context );
             break;
 
+        case SERIALIZE_STATE_OBJECT_KEY:
+            serialize_object_key( context );
+            break;
+
         case SERIALIZE_STATE_NEXT_ARRAY_VALUE:
             next_array_value( context );
+            break;
+
+        case SERIALIZE_STATE_NEXT_OBJECT_VALUE:
+            next_object_value( context );
             break;
 
         default:
             // Shouldn't get here
             context->state = SERIALIZE_STATE_ERROR;
+            break;
         }
     }
 
@@ -382,12 +443,75 @@ if( NULL == context->crnt_node->child )
 else
     {
     // This array has values.
-    string_add_to_buffer( context, "[", 1 );
-
-    // Move on to serializing this array's children
-    if( SERIALIZE_STATE_ERROR != context->state )
+    if( -1 != string_add_to_buffer( context, "[", 1 ) )
         {
+        // Move on to serializing this array's children
         context->crnt_node = context->crnt_node->child;
+        context->state = SERIALIZE_STATE_VALUE;
+        }
+    }
+}
+
+
+/**********************************************************
+*	serialize_object
+*
+*	Sets up the provided context to serialize an array.
+*
+**********************************************************/
+static void serialize_object
+    (
+    serialize_context * context
+    )
+{
+if( NULL == context->crnt_node->child )
+    {
+    // This is an empty object.
+    string_add_to_buffer( context, "{}", 2 );
+    next_serialize_state( context );
+    }
+else
+    {
+    // This object has values
+    if( -1 != string_add_to_buffer( context, "{", 1 ) )
+        {
+        // Move onto this object's children.
+        context->crnt_node = context->crnt_node->child;
+        context->state     = SERIALIZE_STATE_OBJECT_KEY;
+        }
+    }
+}
+
+
+/**********************************************************
+*	serialize_object_key
+*
+*	Serializes an object key and prepares the provided
+*	context to serialize the corresponding value.
+*
+**********************************************************/
+static void serialize_object_key
+    (
+    serialize_context * context
+    )
+{
+int success;
+
+if( NULL == context->crnt_node->string )
+    {
+    // Shouldn't get here.
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+else
+    {
+    // Add the value's key, surrounded by quotes, to the buffer.
+    success = ( -1 != string_add_to_buffer( context, "\"", 1 ) );
+    success = ( success ) && ( -1 != string_add_to_buffer( context, context->crnt_node->string, strlen( context->crnt_node->string ) ) );
+    success = ( success ) && ( -1 != string_add_to_buffer( context, "\"", 1 ) );
+    success = ( success ) && ( -1 != string_add_to_buffer( context, ":", 1 ) );
+
+    if( success )
+        {
         context->state = SERIALIZE_STATE_VALUE;
         }
     }
@@ -437,8 +561,7 @@ switch ( context->crnt_node->type )
         break;
 
     case cJSON_Object:
-        // TODO:
-        context->state = SERIALIZE_STATE_ERROR;
+        serialize_object( context );
         break;
 
     default:
@@ -454,25 +577,38 @@ switch ( context->crnt_node->type )
 *	Adds the provided string to the end of the provided
 *	serialize context's buffer. If the context's buffer
 *	does not have enough room to hold the string, this will
-*	reallocate the buffer to be twice as large.
+*	reallocate the buffer to be twice as large. If an error
+*	occurs attempting to reallocate the buffer, this will
+*	set the provided context's state to SERIALIZE_STATE_ERROR
+*	and return -1. Otherwise this will return 1 and not change
+*	the provided context's state.
 *
 **********************************************************/
-static void string_add_to_buffer
+static int string_add_to_buffer
     (
     serialize_context * context,
     char const *        string,
     int                 string_len
     )
 {
+int rcode;
+
 // Double the buffer if it is not large enough to hold the provided string.
 if( ( context->buffer_posn + string_len ) > context->buffer_len )
     {
     buffer_grow( context, 2 * context->buffer_len );
     }
 
-if( SERIALIZE_STATE_ERROR != context->state )
+if( SERIALIZE_STATE_ERROR == context->state )
     {
-    strncpy( &context->buffer[context->buffer_posn], string, string_len );
-    context->buffer_posn += string_len;
+    rcode = -1;
     }
+else
+    {
+    memcpy( &context->buffer[context->buffer_posn], string, string_len );
+    context->buffer_posn += string_len;
+    rcode = 1;
+    }
+
+return rcode;
 }

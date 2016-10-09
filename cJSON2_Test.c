@@ -57,10 +57,10 @@ static int test_parse_number
     void
     );
 
-static int test_parse_object
-    (
-    void
-    );
+static int test_parse_object_simple_values
+(
+void
+);
 
 static int test_parse_object_empty
     (
@@ -102,6 +102,16 @@ static int test_serialize_null
     void
     );
 
+static int test_serialize_object_empty
+    (
+    void
+    );
+
+static int test_serialize_object_simple_values
+    (
+    void
+    );
+
 static int test_serialize_true
     (
     void
@@ -130,14 +140,14 @@ char const * TEST_PASSED = "PASSED";
 char const * TEST_FAILED = "FAILED";
 
 test tests[] =
-    {/*     description,                    test_func                       */
+    {/*     description,                    test_func                           */
     {   "Get object items",                 test_get_object_item                },
     {   "Parse empty array",                test_parse_array_empty              },
     {   "Parse simple-valued array",        test_parse_array_simple_values      },
     {   "Parse false",                      test_parse_false                    },
     {   "Parse null",                       test_parse_null                     },
     {   "Parse number",                     test_parse_number                   },
-    {   "Parse object",                     test_parse_object                   },
+    {   "Parse simple valued-object",       test_parse_object_simple_values     },
     {   "Parse empty object",               test_parse_object_empty             },
     {   "Parse string",                     test_parse_string                   },
     {   "Parse empty string",               test_parse_string_empty             },
@@ -146,6 +156,8 @@ test tests[] =
     {   "Serialize simple-valued array",    test_serialize_array_simple_values  },
     {   "Serialize false",                  test_serialize_false                },
     {   "Serialize null",                   test_serialize_null                 },
+    {   "Serialize empty object",           test_serialize_object_empty         },
+    {   "Serialize simple-valued object",   test_serialize_object_simple_values },
     {   "Serialize true",                   test_serialize_true                 },
     };
 
@@ -419,12 +431,12 @@ return did_pass;
 
 
 /**********************************************************
-*	test_parse_object
+*	test_parse_object_simple_values
 *
 *	Tests parsing an object
 *
 **********************************************************/
-static int test_parse_object
+static int test_parse_object_simple_values
     (
     void
     )
@@ -588,8 +600,8 @@ int     did_pass;
 cJSON * json;
 char *  serialized_array;
 
-char const * original_array = "[null,true,[],false]";
-int original_array_len = strlen( original_array );
+char const * original_array = "[null,true,[],false,{}]";
+size_t original_array_len = strlen( original_array );
 
 json = cJSON_Parse( original_array );
 serialized_array = cJSON_Print( json );
@@ -602,7 +614,6 @@ cJSON_Delete( json );
 free( serialized_array );
 
 return did_pass;
-
 }
 
 
@@ -659,6 +670,67 @@ did_pass = ( did_pass ) && ( 4 == strnlen( serialized_json, 5 ) );
 
 cJSON_Delete( json );
 free( serialized_json );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_serialize_object_simple_values
+*
+*	Tests serializing an object containing only simple values.
+*
+**********************************************************/
+static int test_serialize_object_simple_values
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *  serialized_object;
+
+char const * original_object = "{\"nullKey\":null,\"trueKey\":true,\"arrayKey\":[],\"falseKey\":false,\"objectKey\":{}}";
+size_t original_object_len = strlen( original_object );
+
+json = cJSON_Parse( original_object );
+serialized_object = cJSON_Print( json );
+
+did_pass = (NULL != serialized_object);
+did_pass = ( did_pass ) && ( 0 == strncmp( original_object, serialized_object, original_object_len ) );
+did_pass = ( did_pass ) && (original_object_len == strnlen( serialized_object, original_object_len + 1 ) );
+
+cJSON_Delete( json );
+free( serialized_object );
+
+return did_pass;
+}
+
+
+/**********************************************************
+*	test_serialize_object_empty
+*
+*	Tests serializing an empty object
+*
+**********************************************************/
+static int test_serialize_object_empty
+    (
+    void
+    )
+{
+int     did_pass;
+cJSON * json;
+char *serialized_object;
+
+json = cJSON_Parse( "{}" );
+serialized_object = cJSON_Print( json );
+
+did_pass = (NULL != serialized_object);
+did_pass = ( did_pass ) && ( 0 == strncmp( "{}", serialized_object, 2 ) );
+did_pass = ( did_pass ) && ( 2 == strnlen( serialized_object, 3 ) );
+
+cJSON_Delete( json );
+free( serialized_object );
 
 return did_pass;
 }
