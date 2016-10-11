@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 
 #include "cJSON2.h"
@@ -69,6 +70,11 @@ static void serialize_context_init
     );
 
 static void serialize_array
+    (
+    serialize_context * context
+    );
+
+static void serialize_number
     (
     serialize_context * context
     );
@@ -393,7 +399,7 @@ while( ( SERIALIZE_STATE_ERROR != context->state ) && ( SERIALIZE_STATE_COMPLETE
         }
     }
 
-if( SERIALIZE_STATE_ERROR != context->state )
+if( SERIALIZE_STATE_COMPLETE == context->state )
     {
     buffer_finalize( context );
     }
@@ -404,7 +410,6 @@ if( SERIALIZE_STATE_COMPLETE != context->state )
     context->hooks.free_fn( context->buffer );
     context->buffer = NULL;
     }
-
 }
 
 
@@ -454,6 +459,36 @@ else
         context->crnt_node = context->crnt_node->child;
         context->state = SERIALIZE_STATE_VALUE;
         }
+    }
+}
+
+
+/**********************************************************
+*	serialize_number
+*
+*	Serializes a number into the provided object's buffer
+*
+*	TODO: Handle NaN and Infinity
+*
+**********************************************************/
+static void serialize_number
+    (
+    serialize_context * context
+    )
+{
+char * number_buffer;
+int    bytes_printed;
+
+bytes_printed = asprintf( &number_buffer, "%f", context->crnt_node->valuedouble );
+if( bytes_printed < 0 )
+    {
+    context->state = SERIALIZE_STATE_ERROR;
+    }
+else
+    {
+    string_add_to_buffer( context, number_buffer, bytes_printed );
+    next_serialize_state( context );
+    free( number_buffer );
     }
 }
 
@@ -526,7 +561,8 @@ else
 /**********************************************************
 *	serialize_string
 *
-*
+*   Writes a JSON string into the provided context's
+*   buffer.
 *
 **********************************************************/
 static void serialize_string
@@ -577,8 +613,7 @@ switch ( context->crnt_node->type )
         break;
 
     case cJSON_Number:
-        // TODO:
-        context->state = SERIALIZE_STATE_ERROR;
+        serialize_number( context );
         break;
 
     case cJSON_String:

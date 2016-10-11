@@ -108,6 +108,11 @@ static int test_serialize_null
     void
     );
 
+static int test_serialize_number
+    (
+    void
+    );
+
 static int test_serialize_object_empty
     (
     void
@@ -172,6 +177,7 @@ test tests[] =
     {   "Serialize simple-valued array",    test_serialize_array_simple_values  },
     {   "Serialize false",                  test_serialize_false                },
     {   "Serialize null",                   test_serialize_null                 },
+    {   "Serialize number",                 test_serialize_number               },
     {   "Serialize empty object",           test_serialize_object_empty         },
     {   "Serialize simple-valued object",   test_serialize_object_simple_values },
     {   "Serialize string",                 test_serialize_string               },
@@ -688,6 +694,21 @@ return serialize_test_case_run( "{\"nullKey\":null,\"trueKey\":true,"
 
 
 /**********************************************************
+*	test_serialize_number
+*
+*	Tests serializing a JSON number
+*
+**********************************************************/
+static int test_serialize_number
+    (
+    void
+    )
+{
+return serialize_test_case_run( "1.1" );
+}
+
+
+/**********************************************************
 *	test_serialize_object_empty
 *
 *	Tests serializing an empty object
@@ -698,7 +719,7 @@ static int test_serialize_object_empty
     void
     )
 {
-return  serialize_test_case_run( "{}" );
+return serialize_test_case_run( "{}" );
 }
 
 
